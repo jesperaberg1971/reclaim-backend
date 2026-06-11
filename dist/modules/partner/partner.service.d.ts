@@ -39,7 +39,7 @@ export declare class PartnerService {
         expense_count: any;
         pending_count: any;
     }>;
-    private getClient;
+    private fetchClientInTx;
     listEmployees(partnerId: string, clientId?: string): Promise<{
         id: any;
         employee_id: any;
