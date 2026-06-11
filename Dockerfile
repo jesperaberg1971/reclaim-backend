@@ -10,6 +10,7 @@ ENV NODE_ENV=production \
 COPY package*.json ./
 RUN npm ci --omit=dev
 
+ARG CACHE_BUST=20260611-1132
 COPY dist ./dist
 
 RUN mkdir -p /tmp/uploads/receipts /tmp/uploads/trip-decisions /tmp/uploads/invoices \
