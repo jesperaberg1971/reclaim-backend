@@ -15,8 +15,8 @@ export declare class PartnerService {
     listClients(partnerId: string): Promise<{
         id: any;
         name: any;
-        is_active: any;
-        created_at: string;
+        is_active: boolean;
+        created_at: any;
         employee_count: any;
         expense_count: any;
         pending_count: any;
@@ -24,8 +24,8 @@ export declare class PartnerService {
     createClient(partnerId: string, dto: CreateClientDto): Promise<{
         id: any;
         name: any;
-        is_active: any;
-        created_at: string;
+        is_active: boolean;
+        created_at: any;
         employee_count: number;
         expense_count: number;
         pending_count: number;
@@ -33,8 +33,8 @@ export declare class PartnerService {
     updateClient(clientId: string, partnerId: string, dto: UpdateClientDto): Promise<{
         id: any;
         name: any;
-        is_active: any;
-        created_at: string;
+        is_active: boolean;
+        created_at: any;
         employee_count: any;
         expense_count: any;
         pending_count: any;

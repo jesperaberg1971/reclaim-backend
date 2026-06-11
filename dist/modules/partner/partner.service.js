@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PartnerService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("typeorm");
-const date_1 = require("../../common/utils/date");
 const employee_id_util_1 = require("../../common/utils/employee-id.util");
 let PartnerService = class PartnerService {
     constructor(dataSource) {
@@ -26,9 +25,9 @@ let PartnerService = class PartnerService {
          JOIN clients c ON c.id = e.client_id WHERE c.partner_id = $1 AND e.is_active = true`, [partnerId]);
             const [expensesRow] = await manager.query(`SELECT
            COUNT(*)::int AS total,
-           COUNT(*) FILTER (WHERE exp.status = 'pending')::int AS pending,
-           COUNT(*) FILTER (WHERE exp.status = 'approved')::int AS approved,
-           COALESCE(SUM(exp.amount_vnd),0)::text AS total_amount_vnd,
+           COUNT(*) FILTER (WHERE exp.status = 'approved' AND exp.approval_decision IS NULL)::int AS pending,
+           COUNT(*) FILTER (WHERE exp.approval_decision = 'approved')::int AS approved,
+           COALESCE(SUM(exp.original_amount),0)::text AS total_amount_vnd,
            COUNT(*) FILTER (
              WHERE exp.created_at >= date_trunc('month', NOW()))::int AS this_month
          FROM expenses exp
@@ -48,21 +47,23 @@ let PartnerService = class PartnerService {
     async listClients(partnerId) {
         return this.dataSource.transaction(async (manager) => {
             await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [partnerId]);
-            const rows = await manager.query(`SELECT c.id, c.name, c.is_active, c.created_at,
-                COUNT(DISTINCT e.id)::int  AS employee_count,
+            const rows = await manager.query(`SELECT c.id, c.name,
+                COUNT(DISTINCT e.id)::int AS employee_count,
                 COUNT(DISTINCT ex.id)::int AS expense_count,
-                COUNT(DISTINCT ex.id) FILTER (WHERE ex.status = 'pending')::int AS pending_count
+                COUNT(DISTINCT ex.id) FILTER (
+                  WHERE ex.status = 'approved' AND ex.approval_decision IS NULL
+                )::int AS pending_count
          FROM clients c
          LEFT JOIN employees e  ON e.client_id = c.id
          LEFT JOIN expenses  ex ON ex.client_id = c.id
          WHERE c.partner_id = $1
-         GROUP BY c.id, c.name, c.is_active, c.created_at
+         GROUP BY c.id, c.name
          ORDER BY c.name`, [partnerId]);
             return rows.map(r => ({
                 id: r.id,
                 name: r.name,
-                is_active: r.is_active,
-                created_at: (0, date_1.toIso)(r.created_at),
+                is_active: true,
+                created_at: null,
                 employee_count: r.employee_count,
                 expense_count: r.expense_count,
                 pending_count: r.pending_count,
@@ -75,9 +76,9 @@ let PartnerService = class PartnerService {
             const existing = await manager.query(`SELECT id FROM clients WHERE partner_id = $1 AND name = $2 LIMIT 1`, [partnerId, dto.name]);
             if (existing.length)
                 throw new common_1.ConflictException('Client with this name already exists');
-            const rows = await manager.query(`INSERT INTO clients (partner_id, name) VALUES ($1, $2) RETURNING id, name, is_active, created_at`, [partnerId, dto.name]);
+            const rows = await manager.query(`INSERT INTO clients (partner_id, name) VALUES ($1, $2) RETURNING id, name`, [partnerId, dto.name]);
             const r = rows[0];
-            return { id: r.id, name: r.name, is_active: r.is_active, created_at: (0, date_1.toIso)(r.created_at), employee_count: 0, expense_count: 0, pending_count: 0 };
+            return { id: r.id, name: r.name, is_active: true, created_at: null, employee_count: 0, expense_count: 0, pending_count: 0 };
         });
     }
     async updateClient(clientId, partnerId, dto) {
@@ -90,10 +91,6 @@ let PartnerService = class PartnerService {
                 setClauses.push(`name = $${i++}`);
                 params.push(dto.name);
             }
-            if (dto.is_active !== undefined) {
-                setClauses.push(`is_active = $${i++}`);
-                params.push(dto.is_active);
-            }
             if (!setClauses.length)
                 return this.fetchClientInTx(manager, clientId, partnerId);
             params.push(clientId, partnerId);
@@ -104,19 +101,21 @@ let PartnerService = class PartnerService {
         });
     }
     async fetchClientInTx(manager, clientId, partnerId) {
-        const rows = await manager.query(`SELECT c.id, c.name, c.is_active, c.created_at,
+        const rows = await manager.query(`SELECT c.id, c.name,
               COUNT(DISTINCT e.id)::int  AS employee_count,
               COUNT(DISTINCT ex.id)::int AS expense_count,
-              COUNT(DISTINCT ex.id) FILTER (WHERE ex.status = 'pending')::int AS pending_count
+              COUNT(DISTINCT ex.id) FILTER (
+                WHERE ex.status = 'approved' AND ex.approval_decision IS NULL
+              )::int AS pending_count
        FROM clients c
        LEFT JOIN employees e  ON e.client_id = c.id
        LEFT JOIN expenses  ex ON ex.client_id = c.id
        WHERE c.id = $1 AND c.partner_id = $2
-       GROUP BY c.id, c.name, c.is_active, c.created_at`, [clientId, partnerId]);
+       GROUP BY c.id, c.name`, [clientId, partnerId]);
         if (!rows.length)
             throw new common_1.NotFoundException('Client not found');
         const r = rows[0];
-        return { id: r.id, name: r.name, is_active: r.is_active, created_at: (0, date_1.toIso)(r.created_at), employee_count: r.employee_count, expense_count: r.expense_count, pending_count: r.pending_count };
+        return { id: r.id, name: r.name, is_active: true, created_at: null, employee_count: r.employee_count, expense_count: r.expense_count, pending_count: r.pending_count };
     }
     async listEmployees(partnerId, clientId) {
         return this.dataSource.transaction(async (manager) => {
@@ -203,10 +202,12 @@ let PartnerService = class PartnerService {
             }
             const rows = await manager.query(`SELECT c.id AS client_id, c.name AS client_name,
                 COUNT(ex.id)::int AS total,
-                COUNT(ex.id) FILTER (WHERE ex.status = 'pending')::int    AS pending,
-                COUNT(ex.id) FILTER (WHERE ex.status = 'approved')::int   AS approved,
-                COUNT(ex.id) FILTER (WHERE ex.status = 'rejected')::int   AS rejected,
-                COALESCE(SUM(ex.amount_vnd) FILTER (WHERE ex.status = 'approved'),0)::text AS approved_amount_vnd
+                COUNT(ex.id) FILTER (
+                  WHERE ex.status = 'approved' AND ex.approval_decision IS NULL)::int AS pending,
+                COUNT(ex.id) FILTER (WHERE ex.approval_decision = 'approved')::int  AS approved,
+                COUNT(ex.id) FILTER (WHERE ex.approval_decision = 'rejected')::int  AS rejected,
+                COALESCE(SUM(ex.original_amount) FILTER (
+                  WHERE ex.approval_decision = 'approved'),0)::text AS approved_amount_vnd
          FROM clients c
          LEFT JOIN expenses ex ON ex.client_id = c.id AND ex.created_at BETWEEN $2 AND $3
          WHERE ${conditions.filter(c => !c.includes('ex.created_at')).join(' AND ')}

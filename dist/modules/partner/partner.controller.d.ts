@@ -16,8 +16,8 @@ export declare class PartnerController {
     listClients(req: any): Promise<{
         id: any;
         name: any;
-        is_active: any;
-        created_at: string;
+        is_active: boolean;
+        created_at: any;
         employee_count: any;
         expense_count: any;
         pending_count: any;
@@ -25,8 +25,8 @@ export declare class PartnerController {
     createClient(req: any, dto: CreateClientDto): Promise<{
         id: any;
         name: any;
-        is_active: any;
-        created_at: string;
+        is_active: boolean;
+        created_at: any;
         employee_count: number;
         expense_count: number;
         pending_count: number;
@@ -34,8 +34,8 @@ export declare class PartnerController {
     updateClient(id: string, req: any, dto: UpdateClientDto): Promise<{
         id: any;
         name: any;
-        is_active: any;
-        created_at: string;
+        is_active: boolean;
+        created_at: any;
         employee_count: any;
         expense_count: any;
         pending_count: any;
@@ -69,8 +69,8 @@ export declare class PartnerController {
         clients: {
             id: any;
             name: any;
-            is_active: any;
-            created_at: string;
+            is_active: boolean;
+            created_at: any;
             employee_count: any;
             expense_count: any;
             pending_count: any;
