@@ -196,6 +196,17 @@ class InitialSchema1749081600000 {
       CREATE POLICY attendance_tenant_isolation ON attendance_checkins
         FOR ALL USING (employee_id IN (${employeesInTenant}))
     `);
+        await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON users TO reclaim_app`);
+        await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON employees TO reclaim_app`);
+        await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON clients TO reclaim_app`);
+        await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON partners TO reclaim_app`);
+        await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON expenses TO reclaim_app`);
+        await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON trip_decisions TO reclaim_app`);
+        await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON subscriptions TO reclaim_app`);
+        await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON policy_logs TO reclaim_app`);
+        await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON attendance_checkins TO reclaim_app`);
+        await queryRunner.query(`GRANT SELECT ON billing_tiers TO reclaim_app`);
+        await queryRunner.query(`GRANT SELECT ON migrations TO reclaim_app`);
     }
     async down(queryRunner) {
         await queryRunner.query(`DROP TABLE IF EXISTS attendance_checkins CASCADE`);
