@@ -17,7 +17,7 @@ exports.MIME_TO_EXT = {
 function mimeToExt(mimeType) {
     return exports.MIME_TO_EXT[mimeType] ?? 'bin';
 }
-async function saveReceiptImage(buffer, mimeType, expenseId, uploadsDir = path.resolve(process.cwd(), 'uploads')) {
+async function saveReceiptImage(buffer, mimeType, expenseId, uploadsDir = process.env.UPLOADS_DIR ?? path.resolve(process.cwd(), 'uploads')) {
     const ext = mimeToExt(mimeType);
     const filename = `${expenseId}.${ext}`;
     const relPath = `receipts/${filename}`;

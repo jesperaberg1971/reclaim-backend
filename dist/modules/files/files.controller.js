@@ -30,7 +30,7 @@ const SAFE_FILENAME = /^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$/;
 let FilesController = class FilesController {
     constructor(dataSource) {
         this.dataSource = dataSource;
-        this.uploadsDir = path.resolve(process.cwd(), 'uploads');
+        this.uploadsDir = process.env.UPLOADS_DIR ?? path.resolve(process.cwd(), 'uploads');
     }
     async serveFile(subfolder, filename, req, res) {
         if (!SAFE_SEGMENT.test(subfolder) || !SAFE_FILENAME.test(filename)) {

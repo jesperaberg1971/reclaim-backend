@@ -771,7 +771,7 @@ let AccountingService = class AccountingService {
             list.push(c);
             commentsMap.set(c.expense_id, list);
         }
-        const uploadsDir = path.resolve(process.cwd(), 'uploads');
+        const uploadsDir = process.env.UPLOADS_DIR ?? path.resolve(process.cwd(), 'uploads');
         const gcsBucket = process.env.GCS_BUCKET_NAME;
         const gcsStorage = gcsBucket ? new storage_1.Storage() : null;
         const readFileContent = async (rel) => {
