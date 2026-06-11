@@ -1,0 +1,72 @@
+import { Expense } from '../../../database/entities/expense.entity';
+export declare function mapToMISA(expenses: Expense[]): {
+    NgayHachToan: string;
+    NgayChungTu: string;
+    SoChungTu: string;
+    DienGiai: string;
+    TKNo: string;
+    TKCo: string;
+    SoTien: string;
+    MaDoiTuong: any;
+    TenDoiTuong: any;
+    MaNhaCungCap: string;
+    TenNhaCungCap: any;
+    KhoanMuc: string;
+    TenKhoanMuc: string;
+    SoHoaDon: any;
+    NgayHoaDon: any;
+    GhiChu: string;
+}[];
+export declare function mapToBizzi(expenses: Expense[]): {
+    transaction_date: string;
+    reference_number: string;
+    description: string;
+    debit_account: string;
+    credit_account: string;
+    amount_vnd: string;
+    currency: string;
+    vendor_name: any;
+    vendor_tax_code: any;
+    invoice_number: any;
+    invoice_date: any;
+    expense_type: string;
+    expense_type_name: string;
+    gate: number;
+    pit_applicable: boolean;
+    reclaim_expense_id: string;
+    parent_expense_id: string;
+}[];
+export declare function mapToSAP(expenses: Expense[]): {
+    header: {
+        CompanyCode: string;
+        DocumentType: string;
+        FiscalPeriod: string;
+        PostingDate: string;
+        DocumentDate: string;
+        Reference: string;
+        HeaderText: string;
+    };
+    items: ({
+        LineItem: number;
+        PostingKey: string;
+        GLAccount: string;
+        CostElement: string;
+        Amount: string;
+        Currency: string;
+        DocumentDate: string;
+        Text: string;
+        Assignment: string;
+        Reference: any;
+    } | {
+        LineItem: number;
+        PostingKey: string;
+        GLAccount: string;
+        CostElement: string;
+        Amount: string;
+        Currency: string;
+        DocumentDate: string;
+        Text: any;
+        Assignment: string;
+        Reference: string;
+    })[];
+};
