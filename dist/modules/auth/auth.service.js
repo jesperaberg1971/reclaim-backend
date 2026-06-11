@@ -126,9 +126,12 @@ let AuthService = AuthService_1 = class AuthService {
             tenantId = user.client.partnerId;
         }
         let employeeId;
-        if (user.role === 'employee' && user.client?.id) {
-            const [emp] = await this.dataSource.query(`SELECT id FROM employees WHERE client_id = $1 AND is_active = true ORDER BY created_at LIMIT 1`, [user.client.id]);
-            employeeId = emp?.id;
+        if (user.role === 'employee' && user.client?.id && tenantId) {
+            const rows = await this.dataSource.transaction(async (manager) => {
+                await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+                return manager.query(`SELECT id FROM employees WHERE client_id = $1 AND is_active = true LIMIT 1`, [user.client.id]);
+            });
+            employeeId = rows[0]?.id;
         }
         const payload = {
             sub: user.id,
