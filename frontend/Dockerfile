@@ -1,6 +1,7 @@
 FROM nginx:alpine
 LABEL org.opencontainers.image.source=https://github.com/jesperaberg1971/reclaim-backend
 
+ARG CACHE_BUST=20260611-1210
 COPY dist/ /usr/share/nginx/html/
 COPY nginx.conf /etc/nginx/nginx.conf.template
 
