@@ -105,12 +105,12 @@ let AuthService = AuthService_1 = class AuthService {
         await this.redisService.cacheDelete(REFRESH_TOKEN_PREFIX + refreshToken);
     }
     async issueTokenPair(user) {
-        const { accessToken, payload } = this.buildAccessToken(user);
+        const { accessToken, payload } = await this.buildAccessToken(user);
         const refreshToken = crypto.randomBytes(40).toString('hex');
         await this.redisService.cacheSet(REFRESH_TOKEN_PREFIX + refreshToken, JSON.stringify({ ...payload, userId: user.id }), REFRESH_TOKEN_TTL_S);
         return { accessToken, refreshToken };
     }
-    buildAccessToken(user) {
+    async buildAccessToken(user) {
         let tenantId = null;
         if (user.role === 'super_admin') {
             tenantId = null;
@@ -125,6 +125,11 @@ let AuthService = AuthService_1 = class AuthService {
                 throw new common_1.InternalServerErrorException('User has no client/partner');
             tenantId = user.client.partnerId;
         }
+        let employeeId;
+        if (user.role === 'employee' && user.client?.id) {
+            const [emp] = await this.dataSource.query(`SELECT id FROM employees WHERE client_id = $1 AND is_active = true ORDER BY created_at LIMIT 1`, [user.client.id]);
+            employeeId = emp?.id;
+        }
         const payload = {
             sub: user.id,
             userId: user.id,
@@ -132,6 +137,7 @@ let AuthService = AuthService_1 = class AuthService {
             role: user.role,
             partnerId: user.partner?.id,
             clientId: user.client?.id,
+            employeeId,
         };
         const accessToken = this.jwtService.sign(payload, {
             secret: this.configService.get('JWT_SECRET'),
