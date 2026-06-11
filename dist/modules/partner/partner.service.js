@@ -13,6 +13,7 @@ exports.PartnerService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("typeorm");
 const date_1 = require("../../common/utils/date");
+const employee_id_util_1 = require("../../common/utils/employee-id.util");
 let PartnerService = class PartnerService {
     constructor(dataSource) {
         this.dataSource = dataSource;
@@ -131,17 +132,19 @@ let PartnerService = class PartnerService {
         }));
     }
     async createEmployee(partnerId, dto) {
-        const clientCheck = await this.dataSource.query(`SELECT id FROM clients WHERE id = $1 AND partner_id = $2`, [dto.client_id, partnerId]);
-        if (!clientCheck.length)
-            throw new common_1.NotFoundException('Client not found');
-        const existing = await this.dataSource.query(`SELECT id FROM employees WHERE client_id = $1 AND employee_id = $2 LIMIT 1`, [dto.client_id, dto.employee_id]);
-        if (existing.length)
-            throw new common_1.ConflictException('Employee ID already exists for this client');
-        const rows = await this.dataSource.query(`INSERT INTO employees (client_id, employee_id, full_name)
-       VALUES ($1, $2, $3)
-       RETURNING id, employee_id, full_name, is_active, pdpd_consent`, [dto.client_id, dto.employee_id, dto.full_name]);
-        const r = rows[0];
-        return { id: r.id, employee_id: r.employee_id, full_name: r.full_name, is_active: r.is_active, pdpd_consent: r.pdpd_consent, client_id: dto.client_id };
+        return this.dataSource.transaction(async (manager) => {
+            const [clientCheck] = await manager.query(`SELECT id FROM clients WHERE id = $1 AND partner_id = $2`, [dto.client_id, partnerId]);
+            if (!clientCheck)
+                throw new common_1.NotFoundException('Client not found');
+            const employeeId = dto.employee_id || await (0, employee_id_util_1.generateEmployeeId)(manager, dto.client_id);
+            const [existing] = await manager.query(`SELECT id FROM employees WHERE client_id = $1 AND employee_id = $2 LIMIT 1`, [dto.client_id, employeeId]);
+            if (existing)
+                throw new common_1.ConflictException('Employee ID already exists for this client');
+            const [r] = await manager.query(`INSERT INTO employees (client_id, employee_id, full_name)
+         VALUES ($1, $2, $3)
+         RETURNING id, employee_id, full_name, is_active, pdpd_consent`, [dto.client_id, employeeId, dto.full_name]);
+            return { id: r.id, employee_id: r.employee_id, full_name: r.full_name, is_active: r.is_active, pdpd_consent: r.pdpd_consent, client_id: dto.client_id };
+        });
     }
     async updateEmployee(employeeId, partnerId, dto) {
         const setClauses = [];

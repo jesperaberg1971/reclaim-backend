@@ -68,8 +68,8 @@ __decorate([
     __metadata("design:type", String)
 ], BulkEmployeeItemDto.prototype, "full_name", void 0);
 __decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.MaxLength)(50),
     __metadata("design:type", String)
 ], BulkEmployeeItemDto.prototype, "employee_code", void 0);
@@ -110,8 +110,9 @@ __decorate([
     __metadata("design:type", String)
 ], CreateEmployeeDto.prototype, "full_name", void 0);
 __decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.MaxLength)(50),
     __metadata("design:type", String)
 ], CreateEmployeeDto.prototype, "employee_code", void 0);
 __decorate([

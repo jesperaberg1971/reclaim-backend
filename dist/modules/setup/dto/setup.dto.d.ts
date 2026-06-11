@@ -14,7 +14,7 @@ export declare class CreateClientAdminDto {
 }
 export declare class BulkEmployeeItemDto {
     full_name: string;
-    employee_code: string;
+    employee_code?: string;
     email: string;
     password: string;
 }
@@ -25,7 +25,7 @@ export declare class BulkImportDto {
 export declare class CreateEmployeeDto {
     client_id: string;
     full_name: string;
-    employee_code: string;
+    employee_code?: string;
     email: string;
     password: string;
 }

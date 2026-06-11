@@ -7,7 +7,7 @@ export declare class UpdateClientDto {
 }
 export declare class CreateEmployeeDto {
     full_name: string;
-    employee_id: string;
+    employee_id?: string;
     client_id: string;
 }
 export declare class UpdateEmployeeDto {

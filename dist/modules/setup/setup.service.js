@@ -19,6 +19,7 @@ const jwt_1 = require("@nestjs/jwt");
 const config_1 = require("@nestjs/config");
 const redis_service_1 = require("../../common/redis/redis.service");
 const policy_service_1 = require("../policy/policy.service");
+const employee_id_util_1 = require("../../common/utils/employee-id.util");
 const INVITE_TTL_SECONDS = 48 * 3600;
 const INVITE_PREFIX = 'invite:';
 let SetupService = SetupService_1 = class SetupService {
@@ -87,15 +88,16 @@ let SetupService = SetupService_1 = class SetupService {
             const [client] = await manager.query(`SELECT id FROM clients WHERE id = $1 AND partner_id = $2 LIMIT 1`, [dto.client_id, tenantId]);
             if (!client)
                 throw new common_1.BadRequestException('Client not found or does not belong to your firm.');
-            const [dupCode] = await manager.query(`SELECT id FROM employees WHERE employee_id = $1 AND client_id = $2 LIMIT 1`, [dto.employee_code, dto.client_id]);
+            const employeeCode = dto.employee_code || await (0, employee_id_util_1.generateEmployeeId)(manager, dto.client_id);
+            const [dupCode] = await manager.query(`SELECT id FROM employees WHERE employee_id = $1 AND client_id = $2 LIMIT 1`, [employeeCode, dto.client_id]);
             if (dupCode)
-                throw new common_1.ConflictException(`Employee code "${dto.employee_code}" is already in use.`);
+                throw new common_1.ConflictException(`Employee code "${employeeCode}" is already in use.`);
             const [dupEmail] = await manager.query(`SELECT id FROM users WHERE email = $1 LIMIT 1`, [dto.email]);
             if (dupEmail)
                 throw new common_1.ConflictException('An account with this email already exists.');
             const empId = (0, crypto_1.randomUUID)();
             await manager.query(`INSERT INTO employees (id, client_id, employee_id, full_name, pdpd_consent, is_active)
-         VALUES ($1, $2, $3, $4, true, true)`, [empId, dto.client_id, dto.employee_code, dto.full_name]);
+         VALUES ($1, $2, $3, $4, true, true)`, [empId, dto.client_id, employeeCode, dto.full_name]);
             await manager.query(`UPDATE clients SET employee_count = employee_count + 1 WHERE id = $1`, [dto.client_id]);
             const userId = (0, crypto_1.randomUUID)();
             await manager.query(`INSERT INTO users (id, email, password_hash, role, client_id, created_at)
@@ -171,10 +173,11 @@ let SetupService = SetupService_1 = class SetupService {
                     const [dupEmail] = await manager.query(`SELECT id FROM users WHERE email = $1 LIMIT 1`, [e.email]);
                     if (dupEmail)
                         throw new common_1.ConflictException(`Employee email "${e.email}" already registered.`);
+                    const employeeCode = e.employee_code || await (0, employee_id_util_1.generateEmployeeId)(manager, clientId);
                     const empId = (0, crypto_1.randomUUID)();
                     const empUid = (0, crypto_1.randomUUID)();
                     await manager.query(`INSERT INTO employees (id, client_id, employee_id, full_name, pdpd_consent, is_active)
-             VALUES ($1, $2, $3, $4, true, true)`, [empId, clientId, e.employee_code, e.full_name]);
+             VALUES ($1, $2, $3, $4, true, true)`, [empId, clientId, employeeCode, e.full_name]);
                     await manager.query(`INSERT INTO users (id, email, password_hash, role, client_id, created_at)
              VALUES ($1, $2, $3, 'employee', $4, NOW())`, [empUid, e.email, e.hash, clientId]);
                     createdEmployees.push({ employee_id: empId, user_id: empUid, full_name: e.full_name });
