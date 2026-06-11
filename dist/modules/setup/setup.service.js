@@ -42,6 +42,7 @@ let SetupService = SetupService_1 = class SetupService {
                 throw new common_1.ConflictException('An account with this email address already exists.');
             }
             const partnerId = (0, crypto_1.randomUUID)();
+            await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [partnerId]);
             await manager.query(`INSERT INTO partners (id, name, tax_code, policies, created_at)
          VALUES ($1, $2, $3, $4::jsonb, NOW())`, [partnerId, dto.firm_name, dto.tax_code, JSON.stringify(policy_service_1.DEFAULT_POLICY)]);
             const userId = (0, crypto_1.randomUUID)();
