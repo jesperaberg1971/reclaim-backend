@@ -1,8 +1,8 @@
 FROM nginx:alpine
 LABEL org.opencontainers.image.source=https://github.com/jesperaberg1971/reclaim-backend
 
-COPY frontend-dist/ /usr/share/nginx/html/
-COPY nginx.frontend.conf /etc/nginx/nginx.frontend.conf.template
+COPY dist/ /usr/share/nginx/html/
+COPY nginx.conf /etc/nginx/nginx.conf.template
 
 EXPOSE 80
 
@@ -10,5 +10,5 @@ EXPOSE 80
 # Single-quoted '${PORT}' restricts substitution to only that variable,
 # leaving nginx's own $uri / $host variables untouched.
 CMD ["/bin/sh", "-c", \
-     "envsubst '${PORT}' < /etc/nginx/nginx.frontend.conf.template \
+     "envsubst '${PORT}' < /etc/nginx/nginx.conf.template \
       > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
