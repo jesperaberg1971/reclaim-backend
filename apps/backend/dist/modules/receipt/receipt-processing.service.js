@@ -212,8 +212,9 @@ let ReceiptProcessingService = ReceiptProcessingService_1 = class ReceiptProcess
                 const [current] = await manager.query(`SELECT supporting_documents FROM expenses WHERE id = $1`, [expenseId]);
                 const docs = current?.supporting_documents ?? [];
                 docs.push({
-                    type: 'trip_decision_pdf_failed',
-                    error: errorMessage,
+                    type: 'trip_decision_pdf',
+                    status: 'failed',
+                    error_message: errorMessage,
                     failed_at: new Date().toISOString(),
                 });
                 await manager.query(`UPDATE expenses SET supporting_documents = $1 WHERE id = $2`, [JSON.stringify(docs), expenseId]);

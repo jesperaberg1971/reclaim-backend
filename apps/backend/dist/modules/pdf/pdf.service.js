@@ -30,7 +30,7 @@ let PdfService = PdfService_1 = class PdfService {
         const pdf = await this.renderPdf(html);
         const url = await this.fileStorageService.saveFile(key, pdf, 'application/pdf');
         this.logger.log(`Invoice PDF generated: ${filename} (${pdf.length} bytes)`);
-        return { type: 'invoice_pdf', url, filename, generated_at: new Date().toISOString() };
+        return { type: 'invoice_pdf', status: 'generated', url, filename, generated_at: new Date().toISOString() };
     }
     async generateTripDecisionPdf(data) {
         const year = new Date().getFullYear();
@@ -41,7 +41,7 @@ let PdfService = PdfService_1 = class PdfService {
         const pdf = await this.renderPdf(html);
         const url = await this.fileStorageService.saveFile(key, pdf, 'application/pdf');
         this.logger.log(`Trip Decision PDF generated: ${filename} (${pdf.length} bytes)`);
-        return { type: 'trip_decision_pdf', url, filename, generated_at: new Date().toISOString() };
+        return { type: 'trip_decision_pdf', status: 'generated', url, filename, generated_at: new Date().toISOString() };
     }
     async renderPdf(html) {
         const puppeteer = await Promise.resolve().then(() => require('puppeteer')).catch(() => null);

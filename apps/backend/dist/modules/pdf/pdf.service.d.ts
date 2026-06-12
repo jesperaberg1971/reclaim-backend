@@ -5,6 +5,7 @@ import { FileStorageService } from '../../common/storage/file-storage.service';
 export { TripDecisionPdfData, InvoicePdfData };
 export interface StoredPdfRef {
     type: 'trip_decision_pdf' | 'invoice_pdf';
+    status: 'generated';
     url: string;
     filename: string;
     generated_at: string;
