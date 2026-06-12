@@ -5,7 +5,8 @@ RUN apk add --no-cache dumb-init \
     && addgroup -S appgroup && adduser -S appuser -G appgroup
 
 ENV NODE_ENV=production \
-    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    UPLOADS_DIR=/tmp/uploads
 
 COPY package*.json ./
 RUN npm ci --omit=dev
