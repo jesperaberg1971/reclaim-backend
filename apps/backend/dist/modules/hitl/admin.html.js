@@ -646,42 +646,49 @@ function renderDetail(exp) {
   // ── Trip Decision PDF section (Gate 1 only) ──────────────────────────────
   const docs = exp.supporting_documents || [];
   const tripPdfEntry = docs.find(d => d.type === 'trip_decision_pdf');
-  const tripPdf    = tripPdfEntry?.status !== 'failed' ? tripPdfEntry : null;
-  const pdfFailed  = tripPdfEntry?.status === 'failed'  ? tripPdfEntry : null;
-  const pdfHref    = tripPdf ? (tripPdf.signed_url || tripPdf.url) : null;
+  const pdfGenerated = tripPdfEntry?.status === 'generated' ? tripPdfEntry : null;
+  const pdfQueued    = tripPdfEntry?.status === 'queued'    ? tripPdfEntry : null;
+  const pdfFailed    = tripPdfEntry?.status === 'failed'    ? tripPdfEntry : null;
+  const pdfHref      = pdfGenerated ? (pdfGenerated.signed_url || pdfGenerated.url) : null;
 
   const BADGE_BASE = 'font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;';
-  const pdfBadge = tripPdf
+  const pdfBadge = pdfGenerated
     ? '<span style="'+BADGE_BASE+'background:#dcfce7;color:#166534">✓ Generated</span>'
-    : pdfFailed
-      ? '<span style="'+BADGE_BASE+'background:#fee2e2;color:#991b1b">✗ Failed</span>'
-      : '<span style="'+BADGE_BASE+'background:#fef9c3;color:#854d0e">⏳ Pending</span>';
+    : pdfQueued
+      ? '<span style="'+BADGE_BASE+'background:#dbeafe;color:#1e40af">⏳ In Progress</span>'
+      : pdfFailed
+        ? '<span style="'+BADGE_BASE+'background:#fee2e2;color:#991b1b">✗ Failed</span>'
+        : '<span style="'+BADGE_BASE+'background:#fef9c3;color:#854d0e">⏳ Pending</span>';
 
-  const pdfBody = tripPdf
+  const pdfBody = pdfGenerated
     ? '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px">'
       +'<a href="'+escA(pdfHref)+'" target="_blank" '
       +'style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;'
       +'background:#1a56db;color:#fff;border-radius:6px;font-size:13px;font-weight:600;'
       +'text-decoration:none">⬇ Download PDF</a>'
-      +(tripPdf.filename
-        ? '<span style="font-size:12px;color:var(--muted)">'+esc(tripPdf.filename)+'</span>'
+      +(pdfGenerated.filename
+        ? '<span style="font-size:12px;color:var(--muted)">'+esc(pdfGenerated.filename)+'</span>'
         : '')
       +'<span style="font-size:12px;color:var(--muted)">'
-      +(tripPdf.generated_at ? 'Generated '+new Date(tripPdf.generated_at).toLocaleString('vi-VN') : '')
+      +(pdfGenerated.generated_at ? 'Generated '+new Date(pdfGenerated.generated_at).toLocaleString('vi-VN') : '')
       +'</span>'
       +'</div>'
-    : pdfFailed
-      ? '<div style="margin-top:8px;font-size:12px">'
-        +'<div style="color:#7f1d1d"><strong>Error:</strong> '+esc(pdfFailed.error_message ?? 'Unknown error')+'</div>'
-        +(pdfFailed.failed_at
-          ? '<div style="color:#991b1b;margin-top:3px">Failed at '
-            +new Date(pdfFailed.failed_at).toLocaleString('vi-VN')+'</div>'
-          : '')
-        +'<div style="color:#92400e;margin-top:4px">Will retry automatically on next Gate 1 re-processing.</div>'
+    : pdfQueued
+      ? '<div style="margin-top:8px;font-size:12px;color:#1e40af">'
+        +'PDF generation is in progress. Refresh in a few moments.'
         +'</div>'
-      : '<div style="margin-top:8px;font-size:12px;color:#92400e">'
-        +'Will be generated automatically when this expense passes Gate 1 processing.'
-        +'</div>';
+      : pdfFailed
+        ? '<div style="margin-top:8px;font-size:12px">'
+          +'<div style="color:#7f1d1d"><strong>Error:</strong> '+esc(pdfFailed.error_message ?? 'Unknown error')+'</div>'
+          +(pdfFailed.failed_at
+            ? '<div style="color:#991b1b;margin-top:3px">Failed at '
+              +new Date(pdfFailed.failed_at).toLocaleString('vi-VN')+'</div>'
+            : '')
+          +'<div style="color:#92400e;margin-top:4px">Will retry automatically.</div>'
+          +'</div>'
+        : '<div style="margin-top:8px;font-size:12px;color:#92400e">'
+          +'Will be generated automatically when this expense passes Gate 1 processing.'
+          +'</div>';
 
   const pdfSection = exp.gate_applied === 1
     ? '<div class="card" style="margin-bottom:16px">'

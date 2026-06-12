@@ -8,12 +8,17 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var ReceiptProcessingService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReceiptProcessingService = void 0;
 exports.route = route;
 exports.applyPolicyCategoryRules = applyPolicyCategoryRules;
 const common_1 = require("@nestjs/common");
+const bullmq_1 = require("@nestjs/bullmq");
+const bullmq_2 = require("bullmq");
 const typeorm_1 = require("typeorm");
 const decimal_js_1 = require("decimal.js");
 const expense_entity_1 = require("../../database/entities/expense.entity");
@@ -21,22 +26,20 @@ const employee_bank_account_entity_1 = require("../../database/entities/employee
 const expense_repository_1 = require("./repositories/expense.repository");
 const trip_decision_repository_1 = require("./repositories/trip-decision.repository");
 const partner_repository_1 = require("./repositories/partner.repository");
-const pdf_service_1 = require("../pdf/pdf.service");
 const notifications_service_1 = require("../notifications/notifications.service");
-const branding_service_1 = require("../branding/branding.service");
+const queue_constants_1 = require("../queue/queue.constants");
 const gate1_evaluator_1 = require("./gate-engine/gate1.evaluator");
 const gate2_evaluator_1 = require("./gate-engine/gate2.evaluator");
 const gate3_evaluator_1 = require("./gate-engine/gate3.evaluator");
 const ZERO = new decimal_js_1.Decimal(0);
 let ReceiptProcessingService = ReceiptProcessingService_1 = class ReceiptProcessingService {
-    constructor(expenseRepo, tripRepo, partnerRepo, pdfService, dataSource, notificationsService, brandingService) {
+    constructor(expenseRepo, tripRepo, partnerRepo, dataSource, notificationsService, pdfQueue) {
         this.expenseRepo = expenseRepo;
         this.tripRepo = tripRepo;
         this.partnerRepo = partnerRepo;
-        this.pdfService = pdfService;
         this.dataSource = dataSource;
         this.notificationsService = notificationsService;
-        this.brandingService = brandingService;
+        this.pdfQueue = pdfQueue;
         this.logger = new common_1.Logger(ReceiptProcessingService_1.name);
     }
     async processExpense(expenseId, tenantId) {
@@ -142,13 +145,7 @@ let ReceiptProcessingService = ReceiptProcessingService_1 = class ReceiptProcess
             return decision;
         });
         if (pendingPdfContext) {
-            try {
-                await this.attachTripDecisionPdf(pendingPdfContext.expense, pendingPdfContext.tripData, expenseId, tenantId);
-            }
-            catch (err) {
-                this.logger.error(`Trip Decision PDF failed for expense ${expenseId}: ${err.message}`, err.stack);
-                await this.storePdfFailureMarker(expenseId, tenantId, err.message);
-            }
+            await this.enqueuePdfGeneration(expenseId, tenantId, pendingPdfContext);
         }
         if (decision.status === expense_entity_1.ExpenseStatus.APPROVED) {
             if (requireManagerApproval) {
@@ -160,85 +157,53 @@ let ReceiptProcessingService = ReceiptProcessingService_1 = class ReceiptProcess
         }
         return decision;
     }
-    async attachTripDecisionPdf(expense, tripRow, expenseId, tenantId) {
-        const { empRow, clientRow, existingDocs } = await this.dataSource.transaction(async (manager) => {
-            await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-            const [[emp], [client], [current]] = await Promise.all([
-                manager.query(`SELECT full_name, employee_id FROM employees WHERE id = $1`, [expense.employee_id]),
-                manager.query(`SELECT name, partner_id FROM clients WHERE id = $1`, [expense.client_id]),
-                manager.query(`SELECT supporting_documents FROM expenses WHERE id = $1`, [expenseId]),
-            ]);
-            return { empRow: emp, clientRow: client, existingDocs: current?.supporting_documents ?? [] };
-        });
-        if (existingDocs.some((d) => d.type === 'trip_decision_pdf' && d.status === 'generated')) {
-            this.logger.log(`Trip Decision PDF already exists for expense ${expenseId} — skipping regeneration`);
-            return;
-        }
-        const decisionNumber = String(Math.floor(Math.random() * 900) + 100);
-        let logoUrl = null;
-        let primaryColor = null;
-        let reportFooter = null;
-        if (clientRow?.partner_id) {
-            try {
-                const branding = await this.brandingService.getBranding(clientRow.partner_id);
-                logoUrl = branding.logo_url;
-                primaryColor = branding.primary_color !== '#1a56db' ? branding.primary_color : null;
-                reportFooter = branding.report_footer;
-            }
-            catch {
-            }
-        }
-        const ref = await this.pdfService.generateTripDecisionPdf({
-            decisionNumber,
-            companyName: clientRow?.name ?? 'Công ty',
-            employeeFullName: empRow?.full_name ?? 'Nhân viên',
-            employeeInternalId: empRow?.employee_id ?? expense.employee_id.slice(0, 8),
-            destination: tripRow?.destination ?? 'Theo lịch công tác được phê duyệt',
-            purpose: tripRow?.purpose ?? 'Công tác theo yêu cầu kinh doanh',
-            startDate: new Date(tripRow.start_date),
-            endDate: new Date(tripRow.end_date),
-            dailyAllowanceVnd: new decimal_js_1.Decimal(String(tripRow.daily_allowance_amount)),
-            logoUrl,
-            primaryColor,
-            reportFooter,
-        });
-        await this.dataSource.transaction(async (manager) => {
-            await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-            existingDocs.push(ref);
-            await manager.query(`UPDATE expenses SET supporting_documents = $1 WHERE id = $2`, [JSON.stringify(existingDocs), expenseId]);
-        });
-        this.logger.log(`Trip Decision PDF attached to expense ${expenseId}: ${ref.url}`);
-    }
-    async storePdfFailureMarker(expenseId, tenantId, errorMessage) {
+    async enqueuePdfGeneration(expenseId, tenantId, ctx) {
         try {
+            const payload = {
+                expenseId,
+                tenantId,
+                expense: {
+                    employee_id: ctx.expense.employee_id,
+                    client_id: ctx.expense.client_id,
+                },
+                tripRow: {
+                    destination: ctx.tripData.destination ?? '',
+                    purpose: ctx.tripData.purpose ?? '',
+                    start_date: new Date(ctx.tripData.start_date).toISOString(),
+                    end_date: new Date(ctx.tripData.end_date).toISOString(),
+                    daily_allowance_amount: String(ctx.tripData.daily_allowance_amount),
+                },
+            };
+            await this.pdfQueue.add('generate-trip-decision-pdf', payload, {
+                attempts: 4,
+                backoff: { type: 'exponential', delay: 10_000 },
+                removeOnComplete: { count: 200 },
+                removeOnFail: { count: 100 },
+            });
             await this.dataSource.transaction(async (manager) => {
                 await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
                 const [current] = await manager.query(`SELECT supporting_documents FROM expenses WHERE id = $1`, [expenseId]);
                 const docs = current?.supporting_documents ?? [];
-                docs.push({
-                    type: 'trip_decision_pdf',
-                    status: 'failed',
-                    error_message: errorMessage,
-                    failed_at: new Date().toISOString(),
-                });
+                docs.push({ type: 'trip_decision_pdf', status: 'queued', queued_at: new Date().toISOString() });
                 await manager.query(`UPDATE expenses SET supporting_documents = $1 WHERE id = $2`, [JSON.stringify(docs), expenseId]);
             });
+            this.logger.log(`[PDF] queued background job for expense ${expenseId}`);
         }
-        catch (markerErr) {
-            this.logger.error(`Could not store PDF failure marker: ${markerErr.message}`);
+        catch (err) {
+            this.logger.error(`[PDF] failed to enqueue PDF job for expense ${expenseId}: ${err.message}`);
         }
     }
 };
 exports.ReceiptProcessingService = ReceiptProcessingService;
 exports.ReceiptProcessingService = ReceiptProcessingService = ReceiptProcessingService_1 = __decorate([
     (0, common_1.Injectable)(),
+    __param(5, (0, bullmq_1.InjectQueue)(queue_constants_1.PDF_GENERATION_QUEUE)),
     __metadata("design:paramtypes", [expense_repository_1.ExpenseRepository,
         trip_decision_repository_1.TripDecisionRepository,
         partner_repository_1.PartnerRepository,
-        pdf_service_1.PdfService,
         typeorm_1.DataSource,
         notifications_service_1.NotificationsService,
-        branding_service_1.BrandingService])
+        bullmq_2.Queue])
 ], ReceiptProcessingService);
 function route(amount, receiptDate, trip, paymentMethod, mealCap, welfareMonthly, welfareUsed, cardLimit, hasBankAccount) {
     const g1 = (0, gate1_evaluator_1.evaluateGate1)(amount, receiptDate, trip);

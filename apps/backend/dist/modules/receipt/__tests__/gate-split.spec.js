@@ -3,9 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const decimal_js_1 = require("decimal.js");
 const testing_1 = require("@nestjs/testing");
 const typeorm_1 = require("typeorm");
-const pdf_service_1 = require("../../pdf/pdf.service");
+const bullmq_1 = require("@nestjs/bullmq");
 const notifications_service_1 = require("../../notifications/notifications.service");
-const branding_service_1 = require("../../branding/branding.service");
 const gate1_evaluator_1 = require("../gate-engine/gate1.evaluator");
 const gate2_evaluator_1 = require("../gate-engine/gate2.evaluator");
 const receipt_processing_service_1 = require("../receipt-processing.service");
@@ -14,6 +13,7 @@ const expense_repository_1 = require("../repositories/expense.repository");
 const trip_decision_repository_1 = require("../repositories/trip-decision.repository");
 const partner_repository_1 = require("../repositories/partner.repository");
 const expense_entity_1 = require("../../../database/entities/expense.entity");
+const queue_constants_1 = require("../../queue/queue.constants");
 const d = (n) => new decimal_js_1.Decimal(n);
 const CAP_300K = {
     id: 'trip-1',
@@ -84,6 +84,7 @@ describe('ReceiptProcessingService — parent + child records created', () => {
     let service;
     let savedExpenses;
     let updatedExpenses;
+    let mockManager;
     const EXPENSE_ID = 'expense-uuid-1';
     const CHILD_ID = 'child-uuid-1';
     const TENANT_ID = 'tenant-uuid-1';
@@ -117,7 +118,7 @@ describe('ReceiptProcessingService — parent + child records created', () => {
     beforeEach(async () => {
         savedExpenses = [];
         updatedExpenses = [];
-        const mockManager = {
+        mockManager = {
             query: jest.fn().mockImplementation((sql) => {
                 if (sql.includes('set_config'))
                     return Promise.resolve([]);
@@ -161,14 +162,7 @@ describe('ReceiptProcessingService — parent + child records created', () => {
         const mockDataSource = {
             transaction: jest.fn().mockImplementation(async (callback) => callback(mockManager)),
         };
-        const mockPdfService = {
-            generateTripDecisionPdf: jest.fn().mockResolvedValue({
-                type: 'trip_decision_pdf',
-                url: 'http://localhost:3000/uploads/trip-decisions/TD-2026-06-test.pdf',
-                filename: 'TD-2026-06-test.pdf',
-                generated_at: new Date().toISOString(),
-            }),
-        };
+        const mockPdfQueue = { add: jest.fn().mockResolvedValue({ id: 'job-test-1' }) };
         const mockNotificationsService = { notifyReadyForReview: jest.fn().mockResolvedValue(undefined) };
         const module = await testing_1.Test.createTestingModule({
             providers: [
@@ -176,14 +170,13 @@ describe('ReceiptProcessingService — parent + child records created', () => {
                 { provide: expense_repository_1.ExpenseRepository, useValue: {} },
                 { provide: trip_decision_repository_1.TripDecisionRepository, useValue: {} },
                 { provide: partner_repository_1.PartnerRepository, useValue: {} },
-                { provide: pdf_service_1.PdfService, useValue: mockPdfService },
                 { provide: typeorm_1.DataSource, useValue: mockDataSource },
                 { provide: notifications_service_1.NotificationsService, useValue: mockNotificationsService },
-                { provide: branding_service_1.BrandingService, useValue: { getBranding: jest.fn().mockResolvedValue({ logo_url: null, primary_color: '#1a56db', accent_color: '#1741b6', company_display_name: null, report_header: null, report_footer: null }) } },
+                { provide: (0, bullmq_1.getQueueToken)(queue_constants_1.PDF_GENERATION_QUEUE), useValue: mockPdfQueue },
             ],
         }).compile();
         service = module.get(receipt_processing_service_2.ReceiptProcessingService);
-        service._mockPdf = mockPdfService;
+        service._mockPdfQueue = mockPdfQueue;
     });
     test('processes without throwing', async () => {
         await expect(service.processExpense(EXPENSE_ID, TENANT_ID)).resolves.toBeDefined();
@@ -239,41 +232,42 @@ describe('ReceiptProcessingService — parent + child records created', () => {
         const deductible = new decimal_js_1.Decimal(String(child.final_amount_deductible));
         expect(deductible.lte(d(150_000))).toBe(true);
     });
-    test('DoD — PDF service is called when Gate 1 succeeds', async () => {
+    test('DoD — PDF job is enqueued when Gate 1 succeeds', async () => {
         await service.processExpense(EXPENSE_ID, TENANT_ID);
-        const pdfMock = service._mockPdf;
-        expect(pdfMock.generateTripDecisionPdf).toHaveBeenCalledTimes(1);
+        const q = service._mockPdfQueue;
+        expect(q.add).toHaveBeenCalledTimes(1);
+        expect(q.add).toHaveBeenCalledWith('generate-trip-decision-pdf', expect.objectContaining({ expenseId: EXPENSE_ID, tenantId: TENANT_ID }), expect.objectContaining({ attempts: 4 }));
     });
-    test('DoD — PDF is generated with correct employee and trip data', async () => {
+    test('DoD — PDF job payload contains correct expense identifiers', async () => {
         await service.processExpense(EXPENSE_ID, TENANT_ID);
-        const pdfMock = service._mockPdf;
-        const [pdfData] = pdfMock.generateTripDecisionPdf.mock.calls[0];
-        expect(pdfData.employeeFullName).toBe('Nguyễn Văn A');
-        expect(pdfData.employeeInternalId).toBe('EMP-001');
-        expect(pdfData.destination).toBe('Thành phố Hồ Chí Minh');
-        expect(pdfData.purpose).toBe('Họp đối tác');
+        const q = service._mockPdfQueue;
+        const [, payload] = q.add.mock.calls[0];
+        expect(payload.expense.employee_id).toBe(EMPLOYEE_ID);
+        expect(payload.expense.client_id).toBe(CLIENT_ID);
     });
-    test('DoD — PDF start/end dates match trip decision', async () => {
+    test('DoD — PDF job payload trip dates match trip decision', async () => {
         await service.processExpense(EXPENSE_ID, TENANT_ID);
-        const pdfMock = service._mockPdf;
-        const [pdfData] = pdfMock.generateTripDecisionPdf.mock.calls[0];
-        expect(pdfData.startDate).toEqual(new Date('2026-06-01'));
-        expect(pdfData.endDate).toEqual(new Date('2026-06-05'));
+        const q = service._mockPdfQueue;
+        const [, payload] = q.add.mock.calls[0];
+        expect(new Date(payload.tripRow.start_date)).toEqual(new Date('2026-06-01'));
+        expect(new Date(payload.tripRow.end_date)).toEqual(new Date('2026-06-05'));
     });
-    test('DoD — PDF allowance matches trip daily_allowance_amount', async () => {
+    test('DoD — PDF job payload trip fields match trip decision', async () => {
         await service.processExpense(EXPENSE_ID, TENANT_ID);
-        const pdfMock = service._mockPdf;
-        const [pdfData] = pdfMock.generateTripDecisionPdf.mock.calls[0];
-        expect(pdfData.dailyAllowanceVnd.equals(d(300_000))).toBe(true);
+        const q = service._mockPdfQueue;
+        const [, payload] = q.add.mock.calls[0];
+        expect(payload.tripRow.destination).toBe('Thành phố Hồ Chí Minh');
+        expect(payload.tripRow.purpose).toBe('Họp đối tác');
+        expect(new decimal_js_1.Decimal(payload.tripRow.daily_allowance_amount).equals(d(300_000))).toBe(true);
     });
-    test('DoD — PDF URL is stored in expense supporting_documents', async () => {
+    test('DoD — queued marker is stored in supporting_documents', async () => {
         await service.processExpense(EXPENSE_ID, TENANT_ID);
-        const mockManager = service.dataSource.transaction.mock.calls[0];
-        expect(mockManager).toBeDefined();
-        const pdfMock = service._mockPdf;
-        const ref = await pdfMock.generateTripDecisionPdf.mock.results[0].value;
-        expect(ref.url).toContain('/uploads/trip-decisions/');
-        expect(ref.type).toBe('trip_decision_pdf');
+        const updateCalls = mockManager.query.mock.calls.filter(([sql]) => sql.includes('UPDATE expenses SET supporting'));
+        expect(updateCalls.length).toBeGreaterThan(0);
+        const lastUpdate = updateCalls[updateCalls.length - 1];
+        const storedDocs = JSON.parse(lastUpdate[1][0]);
+        const queuedEntry = storedDocs.find((d) => d.type === 'trip_decision_pdf' && d.status === 'queued');
+        expect(queuedEntry).toBeDefined();
     });
 });
 //# sourceMappingURL=gate-split.spec.js.map
