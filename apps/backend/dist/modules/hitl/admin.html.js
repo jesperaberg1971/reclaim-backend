@@ -645,24 +645,33 @@ function renderDetail(exp) {
 
   // ── Trip Decision PDF section (Gate 1 only) ──────────────────────────────
   const docs = exp.supporting_documents || [];
-  const tripPdf = docs.find(d => d.type === 'trip_decision_pdf');
-  const pdfSection = (exp.gate_applied === 1 || (exp.already_processed && tripPdf))
+  const tripPdf    = docs.find(d => d.type === 'trip_decision_pdf');
+  const pdfFailed  = docs.find(d => d.type === 'trip_decision_pdf_failed');
+  const pdfHref    = tripPdf ? (tripPdf.signed_url || tripPdf.url) : null;
+  const pdfSection = (exp.gate_applied === 1 || (exp.already_processed && (tripPdf || pdfFailed)))
     ? '<div class="card" style="margin-bottom:16px">'
       +'<div class="card-title">📄 Trip Decision PDF</div>'
       +(tripPdf
         ? '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
-          +'<a href="'+escA(tripPdf.url)+'" target="_blank" '
+          +'<a href="'+escA(pdfHref)+'" target="_blank" '
           +'style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;'
           +'background:#1a56db;color:#fff;border-radius:6px;font-size:13px;font-weight:600;'
           +'text-decoration:none">⬇ Download PDF</a>'
           +'<span style="font-size:12px;color:var(--muted)">Generated '
           +new Date(tripPdf.generated_at).toLocaleString('vi-VN')+'</span>'
           +'</div>'
-        : '<div style="display:flex;align-items:center;gap:8px;padding:10px 0;font-size:13px">'
-          +'<span style="color:#d97706">⚠️</span>'
-          +'<span style="color:#92400e">PDF not yet generated — it will be created automatically '
-          +'when this expense passes Gate 1 processing.</span>'
-          +'</div>'
+        : pdfFailed
+          ? '<div style="display:flex;align-items:center;gap:8px;padding:10px 0;font-size:13px">'
+            +'<span style="color:#dc2626">✗</span>'
+            +'<span style="color:#991b1b">PDF generation failed — '
+            +esc(pdfFailed.error ?? 'unknown error')
+            +'. Will retry on next Gate 1 re-processing.</span>'
+            +'</div>'
+          : '<div style="display:flex;align-items:center;gap:8px;padding:10px 0;font-size:13px">'
+            +'<span style="color:#d97706">⚠️</span>'
+            +'<span style="color:#92400e">PDF not yet generated — it will be created automatically '
+            +'when this expense passes Gate 1 processing.</span>'
+            +'</div>'
       )
       +'</div>'
     : '';

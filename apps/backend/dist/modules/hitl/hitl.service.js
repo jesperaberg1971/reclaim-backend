@@ -86,9 +86,16 @@ let HitlService = HitlService_1 = class HitlService {
             if (!row)
                 throw new common_1.NotFoundException(`Expense ${expenseId} not found`);
             const rawImageUrl = row.receipt_image_url ?? null;
-            const signedImageUrl = rawImageUrl
-                ? await this.signedUrlService.getSignedUrl(rawImageUrl)
-                : null;
+            const rawDocs = row.supporting_documents ?? [];
+            const [signedImageUrl, signedDocs] = await Promise.all([
+                rawImageUrl ? this.signedUrlService.getSignedUrl(rawImageUrl) : Promise.resolve(null),
+                Promise.all(rawDocs.map(async (doc) => {
+                    if (!doc.url)
+                        return doc;
+                    const signedUrl = await this.signedUrlService.getSignedUrl(doc.url);
+                    return signedUrl !== doc.url ? { ...doc, signed_url: signedUrl } : doc;
+                })),
+            ]);
             return {
                 id: row.id,
                 receipt_date: row.receipt_date,
@@ -99,7 +106,7 @@ let HitlService = HitlService_1 = class HitlService {
                 ocr_raw_json: row.ocr_raw_json,
                 status: row.status,
                 gate_applied: Number(row.gate_applied ?? 0),
-                supporting_documents: row.supporting_documents ?? [],
+                supporting_documents: signedDocs,
                 receipt_image_url: rawImageUrl,
                 receipt_image_signed_url: signedImageUrl,
                 already_processed: row.status !== expense_entity_1.ExpenseStatus.NEEDS_REVIEW,

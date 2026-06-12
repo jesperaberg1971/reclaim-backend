@@ -42,6 +42,7 @@ let ReceiptProcessingService = ReceiptProcessingService_1 = class ReceiptProcess
     async processExpense(expenseId, tenantId) {
         this.logger.log(`3-Gate Engine: evaluating expense ${expenseId}`);
         let requireManagerApproval = false;
+        let pendingPdfContext = null;
         const decision = await this.dataSource.transaction(async (manager) => {
             await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
             const expense = await manager.findOne(expense_entity_1.Expense, { where: { id: expenseId } });
@@ -107,8 +108,8 @@ let ReceiptProcessingService = ReceiptProcessingService_1 = class ReceiptProcess
              ON CONFLICT (expense_id, step_order) DO NOTHING`, [expenseId, tenantId, step.order, step.type]);
                 }
             }
-            if (decision.gate === 1 && trip) {
-                await this.attachTripDecisionPdf(manager, expense, tripRow[0], expenseId).catch((err) => this.logger.error(`PDF generation failed (non-fatal): ${err.message}`));
+            if (decision.gate === 1 && tripRow?.length) {
+                pendingPdfContext = { expense, tripData: tripRow[0] };
             }
             if (decision.gate === 2 && decision.finalAmountDeductible.gt(ZERO)) {
                 await recordWelfareDebit(manager, expense.employee_id, decision.finalAmountDeductible.neg(), welfareUsed, expenseId, periodMonth);
@@ -140,6 +141,15 @@ let ReceiptProcessingService = ReceiptProcessingService_1 = class ReceiptProcess
             }
             return decision;
         });
+        if (pendingPdfContext) {
+            try {
+                await this.attachTripDecisionPdf(pendingPdfContext.expense, pendingPdfContext.tripData, expenseId, tenantId);
+            }
+            catch (err) {
+                this.logger.error(`Trip Decision PDF failed for expense ${expenseId}: ${err.message}`, err.stack);
+                await this.storePdfFailureMarker(expenseId, tenantId, err.message);
+            }
+        }
         if (decision.status === expense_entity_1.ExpenseStatus.APPROVED) {
             if (requireManagerApproval) {
                 void this.notificationsService.notifyManagerApprovalRequired(tenantId, expenseId);
@@ -150,9 +160,16 @@ let ReceiptProcessingService = ReceiptProcessingService_1 = class ReceiptProcess
         }
         return decision;
     }
-    async attachTripDecisionPdf(manager, expense, tripRow, expenseId) {
-        const [empRow] = await manager.query(`SELECT full_name, employee_id FROM employees WHERE id = $1`, [expense.employee_id]);
-        const [clientRow] = await manager.query(`SELECT name, partner_id FROM clients WHERE id = $1`, [expense.client_id]);
+    async attachTripDecisionPdf(expense, tripRow, expenseId, tenantId) {
+        const { empRow, clientRow, existingDocs } = await this.dataSource.transaction(async (manager) => {
+            await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+            const [[emp], [client], [current]] = await Promise.all([
+                manager.query(`SELECT full_name, employee_id FROM employees WHERE id = $1`, [expense.employee_id]),
+                manager.query(`SELECT name, partner_id FROM clients WHERE id = $1`, [expense.client_id]),
+                manager.query(`SELECT supporting_documents FROM expenses WHERE id = $1`, [expenseId]),
+            ]);
+            return { empRow: emp, clientRow: client, existingDocs: current?.supporting_documents ?? [] };
+        });
         const decisionNumber = String(Math.floor(Math.random() * 900) + 100);
         let logoUrl = null;
         let primaryColor = null;
@@ -181,11 +198,30 @@ let ReceiptProcessingService = ReceiptProcessingService_1 = class ReceiptProcess
             primaryColor,
             reportFooter,
         });
-        const currentDocs = await manager.query(`SELECT supporting_documents FROM expenses WHERE id = $1`, [expenseId]);
-        const docs = currentDocs?.[0]?.supporting_documents ?? [];
-        docs.push(ref);
-        await manager.query(`UPDATE expenses SET supporting_documents = $1 WHERE id = $2`, [JSON.stringify(docs), expenseId]);
+        await this.dataSource.transaction(async (manager) => {
+            await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+            existingDocs.push(ref);
+            await manager.query(`UPDATE expenses SET supporting_documents = $1 WHERE id = $2`, [JSON.stringify(existingDocs), expenseId]);
+        });
         this.logger.log(`Trip Decision PDF attached to expense ${expenseId}: ${ref.url}`);
+    }
+    async storePdfFailureMarker(expenseId, tenantId, errorMessage) {
+        try {
+            await this.dataSource.transaction(async (manager) => {
+                await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+                const [current] = await manager.query(`SELECT supporting_documents FROM expenses WHERE id = $1`, [expenseId]);
+                const docs = current?.supporting_documents ?? [];
+                docs.push({
+                    type: 'trip_decision_pdf_failed',
+                    error: errorMessage,
+                    failed_at: new Date().toISOString(),
+                });
+                await manager.query(`UPDATE expenses SET supporting_documents = $1 WHERE id = $2`, [JSON.stringify(docs), expenseId]);
+            });
+        }
+        catch (markerErr) {
+            this.logger.error(`Could not store PDF failure marker: ${markerErr.message}`);
+        }
     }
 };
 exports.ReceiptProcessingService = ReceiptProcessingService;

@@ -19,6 +19,7 @@ export declare class ReceiptProcessingService {
     constructor(expenseRepo: ExpenseRepository, tripRepo: TripDecisionRepository, partnerRepo: PartnerRepository, pdfService: PdfService, dataSource: DataSource, notificationsService: NotificationsService, brandingService: BrandingService);
     processExpense(expenseId: string, tenantId: string): Promise<GateDecision>;
     private attachTripDecisionPdf;
+    private storePdfFailureMarker;
 }
 export declare function route(amount: Decimal, receiptDate: Date, trip: TripDecisionCtx | null, paymentMethod: 'cash' | 'card' | 'unknown', mealCap: Decimal, welfareMonthly: Decimal, welfareUsed: Decimal, cardLimit: Decimal, hasBankAccount: boolean): GateDecision;
 export declare function applyPolicyCategoryRules(decision: GateDecision, allowedCategories: string[], requireOriginalReceipt: boolean, hasReceiptImage: boolean): GateDecision;

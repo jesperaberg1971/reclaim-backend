@@ -218,11 +218,19 @@ let AccountingService = class AccountingService {
                 ? originalAmt.minus(deductibleAmt).toFixed(0)
                 : null;
             const rawImageUrl = r.receipt_image_url ?? null;
-            const signedImageUrl = rawImageUrl
-                ? await this.signedUrlService.getSignedUrl(rawImageUrl)
-                : null;
+            const rawDocs = base.supporting_documents ?? [];
+            const [signedImageUrl, signedDocs] = await Promise.all([
+                rawImageUrl ? this.signedUrlService.getSignedUrl(rawImageUrl) : Promise.resolve(null),
+                Promise.all(rawDocs.map(async (doc) => {
+                    if (!doc.url)
+                        return doc;
+                    const signedUrl = await this.signedUrlService.getSignedUrl(doc.url);
+                    return signedUrl !== doc.url ? { ...doc, signed_url: signedUrl } : doc;
+                })),
+            ]);
             return {
                 ...base,
+                supporting_documents: signedDocs,
                 gate_explanation: GATE_EXPLAIN[gate] ?? '',
                 accounting_debit: meta.debit,
                 accounting_credit: meta.credit,
