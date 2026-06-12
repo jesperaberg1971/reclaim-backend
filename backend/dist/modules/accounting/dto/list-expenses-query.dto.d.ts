@@ -5,6 +5,7 @@ export declare class ListExpensesQueryDto {
     employeeId?: string;
     gate?: number;
     status?: string;
+    statusFilter?: string;
     approvalDecision?: string;
     search?: string;
     page?: number;

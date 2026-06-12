@@ -8,6 +8,7 @@ export interface ExpenseFilters {
     employeeId?: string;
     gate?: number;
     status?: 'all' | 'pending_export' | 'exported';
+    statusFilter?: 'needs_review' | 'approved' | 'rejected' | 'erp_exported';
     approvalDecision?: 'pending' | 'approved' | 'rejected';
     search?: string;
     page?: number;
@@ -36,6 +37,7 @@ export interface AccountingExpense {
     pit_flag: boolean;
     erp_exported: boolean;
     status: string;
+    review_reason: string | null;
     supporting_documents: any[];
     has_voucher: boolean;
     accountant_reviewed_at: string | null;
@@ -183,6 +185,7 @@ export declare class AccountingService {
     }[]>;
     getPeriodSummary(tenantId: string, from: string, to: string, clientId?: string): Promise<PeriodSummary>;
     private toExpense;
+    private buildReviewReason;
     listEmployees(tenantId: string): Promise<{
         id: string;
         name: string;

@@ -47,9 +47,13 @@ let AccountingService = class AccountingService {
     async listExpenses(tenantId, filters) {
         return this.dataSource.transaction(async (manager) => {
             await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-            const conditions = [`e.status IN ('approved','erp_exported','rejected')`];
+            const conditions = [`e.status IN ('approved','erp_exported','rejected','needs_review')`];
             const params = [];
             let p = 1;
+            if (filters.statusFilter) {
+                conditions.push(`e.status = $${p++}`);
+                params.push(filters.statusFilter);
+            }
             if (filters.from) {
                 conditions.push(`e.receipt_date::date >= $${p++}`);
                 params.push(filters.from);
@@ -272,6 +276,7 @@ let AccountingService = class AccountingService {
             pit_flag: Boolean(r.pit_flag),
             erp_exported: Boolean(r.erp_exported),
             status: r.status,
+            review_reason: r.status === 'needs_review' ? this.buildReviewReason(r.ocr_raw_json) : null,
             supporting_documents: docs,
             has_voucher: gate === 3,
             accountant_reviewed_at: r.accountant_reviewed_at
@@ -282,6 +287,27 @@ let AccountingService = class AccountingService {
             parent_expense_id: r.parent_expense_id ?? null,
             split_child_count: Number(r.split_child_count ?? 0),
         };
+    }
+    buildReviewReason(ocr) {
+        if (!ocr)
+            return 'Manual review required';
+        const reasons = [];
+        const confidence = Number(ocr.confidence ?? 0);
+        const failureReasons = ocr.diagnostics?.failure_reasons ?? [];
+        const missingFields = ocr.diagnostics?.missing_fields ?? [];
+        if (confidence > 0 && confidence < 0.60) {
+            reasons.push(`Low confidence (${Math.round(confidence * 100)}%)`);
+        }
+        for (const field of missingFields) {
+            reasons.push(`Missing ${field.replace(/_/g, ' ')}`);
+        }
+        for (const fr of failureReasons) {
+            const label = fr.replace(/_/g, ' ');
+            if (!reasons.some(r => r.toLowerCase().includes(label.toLowerCase()))) {
+                reasons.push(label);
+            }
+        }
+        return reasons.length > 0 ? reasons.join(' · ') : 'Manual review required';
     }
     async listEmployees(tenantId) {
         return this.dataSource.transaction(async (manager) => {
