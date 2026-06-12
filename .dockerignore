@@ -1,0 +1,19 @@
+# Git history
+.git
+.gitignore
+
+# Monorepo sub-directories — Dockerfile only needs root-level dist/
+apps/
+backend/
+frontend/
+
+# Dependencies — installed fresh inside the image via npm ci
+node_modules/
+**/node_modules/
+
+# Dev / editor artefacts
+*.md
+.DS_Store
+*.log
+.env
+.env.*
