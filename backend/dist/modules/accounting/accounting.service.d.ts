@@ -186,6 +186,7 @@ export declare class AccountingService {
     }[]>;
     getPeriodSummary(tenantId: string, from: string, to: string, clientId?: string): Promise<PeriodSummary>;
     private toExpense;
+    private buildExpenseCsv;
     private buildReviewReason;
     listEmployees(tenantId: string): Promise<{
         id: string;

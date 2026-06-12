@@ -28,6 +28,20 @@ const CATEGORY_LABELS = {
     personal_card_reimbursement: 'Chi hộ cá nhân (Gate 3)',
     flagged: 'Bị gắn cờ',
 };
+const GATE_CSV_META = {
+    1: {
+        name: 'Gate 1 – Business Trip Allowance',
+        reasoning: 'Expense occurred during an approved business trip. Deductible as daily travel allowance (Circular 96/2015/TT-BTC).',
+    },
+    2: {
+        name: 'Gate 2 – Employee Welfare Allowance',
+        reasoning: 'Employee welfare allowance for meals/accommodation within the monthly cap.',
+    },
+    3: {
+        name: 'Gate 3 – Personal Card Reimbursement',
+        reasoning: 'Paid with personal card. Reimbursed in full via payment voucher.',
+    },
+};
 const GATE_LABELS = {
     1: { name: 'Gate 1 — Công tác phí', code: 'travel_allowance', debit: '6422', credit: '111' },
     2: { name: 'Gate 2 — Phúc lợi nhân viên', code: 'welfare_allowance', debit: '6422', credit: '111' },
@@ -293,6 +307,56 @@ let AccountingService = class AccountingService {
             parent_expense_id: r.parent_expense_id ?? null,
             split_child_count: Number(r.split_child_count ?? 0),
         };
+    }
+    buildExpenseCsv(rows) {
+        const csvEsc = (v) => {
+            const s = String(v ?? '');
+            if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+                return '"' + s.replace(/"/g, '""') + '"';
+            }
+            return s;
+        };
+        const headers = [
+            'expense_id', 'receipt_date', 'employee_name', 'employee_id', 'client_name',
+            'vendor', 'original_amount_vnd', 'deductible_amount_vnd', 'non_deductible_amount_vnd',
+            'currency', 'gate_applied', 'gate_name', 'gate_reasoning',
+            'final_category', 'pit_flag', 'pit_reason',
+            'approval_decision', 'status', 'supporting_documents',
+        ];
+        const lines = [headers.join(',')];
+        for (const r of rows) {
+            const orig = new decimal_js_1.Decimal(String(r.original_amount));
+            const ded = new decimal_js_1.Decimal(String(r.final_amount_deductible));
+            const nonDed = orig.minus(ded).gt(0) ? orig.minus(ded).toFixed(0) : '0';
+            const gate = Number(r.gate_applied);
+            const meta = GATE_CSV_META[gate] ?? { name: `Gate ${gate}`, reasoning: '' };
+            const docs = r.supporting_documents ?? [];
+            const docList = docs
+                .map(d => `${d.type}:${d.filename ?? path.basename(String(d.url ?? ''))}`)
+                .join('|');
+            lines.push([
+                csvEsc(r.id),
+                csvEsc(new Date(r.receipt_date).toISOString().slice(0, 10)),
+                csvEsc(r.employee_name),
+                csvEsc(r.employee_internal_id),
+                csvEsc(r.client_name),
+                csvEsc(r.ocr_raw_json?.vendor ?? ''),
+                csvEsc(orig.toFixed(0)),
+                csvEsc(ded.toFixed(0)),
+                csvEsc(nonDed),
+                csvEsc(r.currency ?? 'VND'),
+                csvEsc(gate),
+                csvEsc(meta.name),
+                csvEsc(meta.reasoning),
+                csvEsc(r.final_category ?? ''),
+                csvEsc(r.pit_flag ? 'yes' : 'no'),
+                csvEsc(r.pit_flag ? 'Amount exceeds tax-free limit — excess subject to personal income tax' : ''),
+                csvEsc(r.approval_decision ?? 'pending'),
+                csvEsc(r.status),
+                csvEsc(docList),
+            ].join(','));
+        }
+        return Buffer.from('﻿' + lines.join('\n'), 'utf-8');
     }
     buildReviewReason(ocr) {
         if (!ocr)
@@ -773,12 +837,21 @@ let AccountingService = class AccountingService {
             const expRows = await manager.query(`
         SELECT
           e.id,
-          e.receipt_date::date  AS receipt_date,
+          e.receipt_date::date      AS receipt_date,
+          e.original_amount,
+          e.final_amount_deductible,
+          e.currency,
+          e.gate_applied,
+          e.final_category,
+          e.pit_flag,
+          e.approval_decision,
+          e.status,
           e.receipt_image_url,
           e.supporting_documents,
-          c.name                AS client_name,
-          emp.full_name         AS employee_name,
-          emp.employee_id       AS employee_internal_id
+          e.ocr_raw_json,
+          c.name                    AS client_name,
+          emp.full_name             AS employee_name,
+          emp.employee_id           AS employee_internal_id
         FROM expenses e
         JOIN employees emp ON emp.id = e.employee_id
         JOIN clients   c   ON c.id   = e.client_id
@@ -888,6 +961,7 @@ let AccountingService = class AccountingService {
         }
         manifestLines.push('', `Total files : ${fileCount}`, `Skipped     : ${skipCount}`);
         zipEntries['MANIFEST.txt'] = new Uint8Array(Buffer.from(manifestLines.join('\n'), 'utf-8'));
+        zipEntries['expenses.csv'] = new Uint8Array(this.buildExpenseCsv(rows));
         const zipped = (0, fflate_1.zipSync)(zipEntries, { level: 0 });
         const safeFrom = from.replace(/-/g, '');
         const safeTo = to.replace(/-/g, '');
