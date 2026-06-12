@@ -45,7 +45,8 @@ function buildService(countValue, dataRows) {
         transaction: jest.fn().mockImplementation(async (cb) => cb({ query: queryMock })),
     };
     const mockRedis = { cacheGet: jest.fn().mockResolvedValue(null), cacheSet: jest.fn(), cacheDelete: jest.fn() };
-    const service = new accounting_service_1.AccountingService(mockDataSource, mockNotificationsService, mockRedis);
+    const mockSignedUrlService = { getSignedUrl: jest.fn().mockImplementation((u) => Promise.resolve(u)) };
+    const service = new accounting_service_1.AccountingService(mockDataSource, mockNotificationsService, mockRedis, mockSignedUrlService);
     return { service, queryMock };
 }
 function findCall(queryMock, predicate) {

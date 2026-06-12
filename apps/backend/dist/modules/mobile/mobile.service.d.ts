@@ -4,6 +4,7 @@ import { RedisService } from '../../common/redis/redis.service';
 import { ExpenseStatus } from '../../database/entities/expense.entity';
 import { JwtPayload } from '../auth/dto/jwt-payload.interface';
 import { FailureMessage } from '../../common/utils/failure-messages';
+import { SignedUrlService } from '../../common/storage/signed-url.service';
 export interface MobileExpenseItem {
     id: string;
     status: string;
@@ -14,6 +15,7 @@ export interface MobileExpenseItem {
     currency: string;
     receipt_date: string;
     receipt_image_url: string;
+    receipt_image_signed_url: string | null;
     supporting_documents: Array<{
         type: string;
         url: string;
@@ -66,13 +68,15 @@ export declare class MobileService {
     private readonly ocrQueue;
     private readonly expenseRepo;
     private readonly redisService;
+    private readonly signedUrlService;
     private readonly logger;
-    constructor(ocrQueue: Queue, expenseRepo: ExpenseRepository, redisService: RedisService);
+    constructor(ocrQueue: Queue, expenseRepo: ExpenseRepository, redisService: RedisService, signedUrlService: SignedUrlService);
     enqueueReceiptUpload(file: Express.Multer.File, user: JwtPayload, employeeId?: string, idempotencyKey?: string): Promise<{
         expenseId: string;
         status: ExpenseStatus;
         user_message: string;
         receipt_image_url: string;
+        receipt_image_signed_url: string | null;
     }>;
     private resolveIdemKey;
     batchUploadReceipts(files: Express.Multer.File[], user: JwtPayload, employeeId?: string, idempotencyKeys?: string[]): Promise<BatchUploadResponse>;

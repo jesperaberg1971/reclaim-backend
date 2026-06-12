@@ -19,6 +19,7 @@ const fflate_1 = require("fflate");
 const storage_1 = require("@google-cloud/storage");
 const notifications_service_1 = require("../notifications/notifications.service");
 const redis_service_1 = require("../../common/redis/redis.service");
+const signed_url_service_1 = require("../../common/storage/signed-url.service");
 const DASHBOARD_CACHE_TTL = 120;
 const EXPORTS_CACHE_TTL = 300;
 const ANALYTICS_CACHE_TTL = 300;
@@ -53,10 +54,11 @@ const GATE_EXPLAIN = {
     3: 'Nhân viên thanh toán bằng thẻ cá nhân và được hoàn ứng. Phiếu chi được tạo tự động.',
 };
 let AccountingService = class AccountingService {
-    constructor(dataSource, notificationsService, redisService) {
+    constructor(dataSource, notificationsService, redisService, signedUrlService) {
         this.dataSource = dataSource;
         this.notificationsService = notificationsService;
         this.redisService = redisService;
+        this.signedUrlService = signedUrlService;
     }
     async listExpenses(tenantId, filters) {
         return this.dataSource.transaction(async (manager) => {
@@ -166,7 +168,7 @@ let AccountingService = class AccountingService {
           e.currency, e.gate_applied, e.final_category, e.pit_flag,
           e.erp_exported, e.status, e.supporting_documents, e.ocr_raw_json,
           e.accountant_reviewed_at, e.reviewer_note, e.approval_decision,
-          e.parent_expense_id,
+          e.parent_expense_id, e.receipt_image_url,
           (SELECT ARRAY_AGG(ec.id) FROM expenses ec WHERE ec.parent_expense_id = e.id) AS child_ids,
           emp.full_name       AS employee_name,
           emp.employee_id     AS employee_internal_id,
@@ -215,6 +217,10 @@ let AccountingService = class AccountingService {
             const overflowAmt = Boolean(r.pit_flag) && originalAmt.greaterThan(deductibleAmt)
                 ? originalAmt.minus(deductibleAmt).toFixed(0)
                 : null;
+            const rawImageUrl = r.receipt_image_url ?? null;
+            const signedImageUrl = rawImageUrl
+                ? await this.signedUrlService.getSignedUrl(rawImageUrl)
+                : null;
             return {
                 ...base,
                 gate_explanation: GATE_EXPLAIN[gate] ?? '',
@@ -224,6 +230,8 @@ let AccountingService = class AccountingService {
                 ocr_vendor: r.ocr_raw_json?.vendor ?? null,
                 ocr_confidence: r.ocr_raw_json?.confidence ?? 0,
                 child_ids: (r.child_ids ?? []).filter(Boolean),
+                receipt_image_url: rawImageUrl,
+                receipt_image_signed_url: signedImageUrl && signedImageUrl !== rawImageUrl ? signedImageUrl : null,
                 voucher,
                 trip_decision: tripDecision,
             };
@@ -979,7 +987,8 @@ exports.AccountingService = AccountingService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [typeorm_1.DataSource,
         notifications_service_1.NotificationsService,
-        redis_service_1.RedisService])
+        redis_service_1.RedisService,
+        signed_url_service_1.SignedUrlService])
 ], AccountingService);
 function safeName(s) {
     return String(s ?? '')

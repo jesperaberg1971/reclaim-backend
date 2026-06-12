@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RedisService } from '../../common/redis/redis.service';
+import { SignedUrlService } from '../../common/storage/signed-url.service';
 export interface ExpenseFilters {
     from?: string;
     to?: string;
@@ -54,6 +55,8 @@ export interface AccountingExpenseDetail extends AccountingExpense {
     ocr_vendor: string | null;
     ocr_confidence: number;
     child_ids: string[];
+    receipt_image_url: string | null;
+    receipt_image_signed_url: string | null;
     voucher: {
         voucher_number: string;
         amount_vnd: string;
@@ -177,7 +180,8 @@ export declare class AccountingService {
     private readonly dataSource;
     private readonly notificationsService;
     private readonly redisService;
-    constructor(dataSource: DataSource, notificationsService: NotificationsService, redisService: RedisService);
+    private readonly signedUrlService;
+    constructor(dataSource: DataSource, notificationsService: NotificationsService, redisService: RedisService, signedUrlService: SignedUrlService);
     listExpenses(tenantId: string, filters: ExpenseFilters): Promise<PagedExpenses>;
     getExpenseDetail(expenseId: string, tenantId: string): Promise<AccountingExpenseDetail>;
     listClients(tenantId: string): Promise<{

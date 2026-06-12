@@ -26,7 +26,8 @@ function buildService(expenseExists = true) {
     const ds = {
         transaction: jest.fn().mockImplementation(async (cb) => cb({ query: queryMock })),
     };
-    const service = new accounting_service_1.AccountingService(ds, mockNotifications, mockRedis);
+    const mockSignedUrlService = { getSignedUrl: jest.fn().mockImplementation((u) => Promise.resolve(u)) };
+    const service = new accounting_service_1.AccountingService(ds, mockNotifications, mockRedis, mockSignedUrlService);
     return { service, queryMock };
 }
 beforeEach(() => {

@@ -13,6 +13,7 @@ const mobile_service_1 = require("./mobile.service");
 const queue_module_1 = require("../queue/queue.module");
 const receipt_module_1 = require("../receipt/receipt.module");
 const redis_module_1 = require("../../common/redis/redis.module");
+const storage_module_1 = require("../../common/storage/storage.module");
 let MobileModule = class MobileModule {
 };
 exports.MobileModule = MobileModule;
@@ -22,6 +23,7 @@ exports.MobileModule = MobileModule = __decorate([
             queue_module_1.QueueModule,
             receipt_module_1.ReceiptModule,
             redis_module_1.RedisModule,
+            storage_module_1.StorageModule,
         ],
         controllers: [mobile_controller_1.MobileController],
         providers: [mobile_service_1.MobileService],

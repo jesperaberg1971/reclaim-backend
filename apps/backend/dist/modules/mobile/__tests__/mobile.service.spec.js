@@ -52,7 +52,8 @@ function buildService() {
         cacheGet: jest.fn().mockResolvedValue(null),
         cacheSet: jest.fn().mockResolvedValue(undefined),
     };
-    const service = new mobile_service_1.MobileService(mockQueue, mockRepo, mockRedis);
+    const mockSignedUrlService = { getSignedUrl: jest.fn().mockImplementation((u) => Promise.resolve(u)) };
+    const service = new mobile_service_1.MobileService(mockQueue, mockRepo, mockRedis, mockSignedUrlService);
     return { service, mockRepo, mockQueue, mockRedis, getSaved: () => savedStub };
 }
 beforeEach(() => {
