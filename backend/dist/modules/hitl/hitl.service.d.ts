@@ -34,6 +34,8 @@ export interface ReviewQueueItem {
 export interface ExpenseDetail extends ReviewQueueItem {
     ocr_raw_json: any;
     status: string;
+    gate_applied: number;
+    supporting_documents: any[];
     employee_internal_id: string | null;
     receipt_image_url: string | null;
     already_processed: boolean;
