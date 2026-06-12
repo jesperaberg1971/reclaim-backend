@@ -9,6 +9,7 @@ var SignedUrlService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SignedUrlService = void 0;
 const common_1 = require("@nestjs/common");
+const crypto_1 = require("crypto");
 const storage_1 = require("@google-cloud/storage");
 let SignedUrlService = SignedUrlService_1 = class SignedUrlService {
     constructor() {
@@ -16,28 +17,30 @@ let SignedUrlService = SignedUrlService_1 = class SignedUrlService {
         this.bucket = process.env.GCS_BUCKET_NAME ?? null;
         this.expiry = Number(process.env.STORAGE_SIGNED_URL_EXPIRY ?? '3600');
         this.storage = this.bucket ? new storage_1.Storage() : null;
+        this.signingKey = process.env.FILE_SIGNING_KEY ?? process.env.JWT_SECRET ?? 'dev-file-key';
     }
     async getSignedUrl(storedUrl, expiresInSeconds) {
-        if (!this.bucket || !this.storage) {
-            return storedUrl;
-        }
-        const key = storedUrl.replace(/^\/api\/files\//, '');
         const ttl = expiresInSeconds ?? this.expiry;
-        try {
-            const [url] = await this.storage
-                .bucket(this.bucket)
-                .file(key)
-                .getSignedUrl({
-                version: 'v4',
-                action: 'read',
-                expires: Date.now() + ttl * 1000,
-            });
-            return url;
+        if (this.bucket && this.storage) {
+            const key = storedUrl.replace(/^\/api\/files\//, '');
+            try {
+                const [url] = await this.storage
+                    .bucket(this.bucket)
+                    .file(key)
+                    .getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + ttl * 1000 });
+                return url;
+            }
+            catch (err) {
+                this.logger.warn(`GCS signed URL failed for ${key}: ${err.message}`);
+            }
         }
-        catch (err) {
-            this.logger.warn(`Signed URL generation failed for ${key}: ${err.message}`);
-            return storedUrl;
-        }
+        const objectKey = storedUrl.replace(/^\/api\/files\//, '');
+        const exp = Math.floor(Date.now() / 1000) + ttl;
+        const sig = (0, crypto_1.createHmac)('sha256', this.signingKey)
+            .update(`${objectKey}:${exp}`)
+            .digest('hex');
+        const qs = new URLSearchParams({ path: objectKey, exp: String(exp), sig }).toString();
+        return `/api/files/view?${qs}`;
     }
 };
 exports.SignedUrlService = SignedUrlService;

@@ -3,5 +3,6 @@ export declare class SignedUrlService {
     private readonly bucket;
     private readonly expiry;
     private readonly storage;
+    private readonly signingKey;
     getSignedUrl(storedUrl: string, expiresInSeconds?: number): Promise<string>;
 }
