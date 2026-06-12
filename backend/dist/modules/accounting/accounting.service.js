@@ -196,11 +196,17 @@ let AccountingService = class AccountingService {
                 amount_vnd: new decimal_js_1.Decimal(String(r.final_amount_deductible)).toFixed(0),
                 bank_last_four: r.bank_last_four ?? null,
             } : null;
+            const originalAmt = new decimal_js_1.Decimal(String(r.original_amount));
+            const deductibleAmt = new decimal_js_1.Decimal(String(r.final_amount_deductible));
+            const overflowAmt = Boolean(r.pit_flag) && originalAmt.greaterThan(deductibleAmt)
+                ? originalAmt.minus(deductibleAmt).toFixed(0)
+                : null;
             return {
                 ...base,
                 gate_explanation: GATE_EXPLAIN[gate] ?? '',
                 accounting_debit: meta.debit,
                 accounting_credit: meta.credit,
+                overflow_amount_vnd: overflowAmt,
                 ocr_vendor: r.ocr_raw_json?.vendor ?? null,
                 ocr_confidence: r.ocr_raw_json?.confidence ?? 0,
                 child_ids: (r.child_ids ?? []).filter(Boolean),
@@ -258,7 +264,7 @@ let AccountingService = class AccountingService {
     }
     toExpense(r) {
         const gate = Number(r.gate_applied);
-        const meta = GATE_LABELS[gate] ?? GATE_LABELS[2];
+        const meta = GATE_LABELS[gate] ?? { name: 'Chưa xác định', code: 'pending', debit: '—', credit: '—' };
         const docs = r.supporting_documents ?? [];
         return {
             id: r.id,

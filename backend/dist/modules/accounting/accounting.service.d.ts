@@ -50,6 +50,7 @@ export interface AccountingExpenseDetail extends AccountingExpense {
     gate_explanation: string;
     accounting_debit: string;
     accounting_credit: string;
+    overflow_amount_vnd: string | null;
     ocr_vendor: string | null;
     ocr_confidence: number;
     child_ids: string[];
