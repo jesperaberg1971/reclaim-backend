@@ -206,7 +206,7 @@ describe('listExpenses — filters', () => {
         const { service, queryMock } = buildService(0, []);
         await service.listExpenses(TENANT, {});
         const { sql } = findCall(queryMock, (s) => s.includes('COUNT(*)'));
-        expect(sql).toContain("status IN ('approved','erp_exported','rejected')");
+        expect(sql).toContain("status IN ('approved','erp_exported','rejected','needs_review')");
         const andCount = (sql.match(/AND/gi) ?? []).length;
         expect(andCount).toBe(0);
     });
