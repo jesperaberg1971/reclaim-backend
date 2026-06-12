@@ -23,6 +23,7 @@ const typeorm_2 = require("@nestjs/typeorm");
 const throttler_1 = require("@nestjs/throttler");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const public_decorator_1 = require("../../common/decorators/public.decorator");
+const spaces_service_1 = require("../../common/storage/spaces.service");
 const EXT_TO_MIME = {
     jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
     pdf: 'application/pdf', tiff: 'image/tiff', bmp: 'image/bmp', webp: 'image/webp',
@@ -30,8 +31,9 @@ const EXT_TO_MIME = {
 const SAFE_SEGMENT = /^[a-zA-Z0-9_-]+$/;
 const SAFE_FILENAME = /^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$/;
 let FilesController = class FilesController {
-    constructor(dataSource) {
+    constructor(dataSource, spacesService) {
         this.dataSource = dataSource;
+        this.spacesService = spacesService;
         this.uploadsDir = process.env.UPLOADS_DIR ?? path.resolve(process.cwd(), 'uploads');
         this.signingKey = process.env.FILE_SIGNING_KEY ?? process.env.JWT_SECRET ?? 'dev-file-key';
     }
@@ -93,7 +95,20 @@ let FilesController = class FilesController {
     }
     async sendFile(subfolder, filename, res) {
         const relPath = `${subfolder}/${filename}`;
+        const ext = path.extname(filename).slice(1).toLowerCase();
+        const mimeType = EXT_TO_MIME[ext] ?? 'application/octet-stream';
         const bucketName = process.env.GCS_BUCKET_NAME;
+        if (process.env.STORAGE_PROVIDER === 'spaces') {
+            let buffer;
+            try {
+                buffer = await this.spacesService.getObject(relPath);
+            }
+            catch {
+                throw new common_1.NotFoundException();
+            }
+            res.type(mimeType).send(buffer);
+            return;
+        }
         if (bucketName) {
             let buffer;
             try {
@@ -102,8 +117,7 @@ let FilesController = class FilesController {
             catch {
                 throw new common_1.NotFoundException();
             }
-            const ext = path.extname(filename).slice(1).toLowerCase();
-            res.type(EXT_TO_MIME[ext] ?? 'application/octet-stream').send(buffer);
+            res.type(mimeType).send(buffer);
             return;
         }
         const filePath = path.join(this.uploadsDir, relPath);
@@ -141,6 +155,7 @@ exports.FilesController = FilesController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, throttler_1.SkipThrottle)(),
     __param(0, (0, typeorm_2.InjectDataSource)()),
-    __metadata("design:paramtypes", [typeorm_1.DataSource])
+    __metadata("design:paramtypes", [typeorm_1.DataSource,
+        spaces_service_1.SpacesService])
 ], FilesController);
 //# sourceMappingURL=files.controller.js.map

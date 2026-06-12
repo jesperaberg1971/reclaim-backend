@@ -59,6 +59,18 @@ let SpacesService = SpacesService_1 = class SpacesService {
         const ttl = expiresInSeconds ?? this.expiry;
         return (0, s3_request_presigner_1.getSignedUrl)(this.client, new client_s3_1.GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn: ttl });
     }
+    async getObject(key) {
+        const response = await this.client.send(new client_s3_1.GetObjectCommand({ Bucket: this.bucket, Key: key }));
+        const body = response.Body;
+        if (!body)
+            throw new Error(`Empty response body for key: ${key}`);
+        return new Promise((resolve, reject) => {
+            const chunks = [];
+            body.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+            body.on('end', () => resolve(Buffer.concat(chunks)));
+            body.on('error', reject);
+        });
+    }
     async deleteFile(key) {
         try {
             await this.client.send(new client_s3_1.DeleteObjectCommand({ Bucket: this.bucket, Key: key }));

@@ -8,5 +8,6 @@ export declare class SpacesService implements OnModuleInit {
     onModuleInit(): Promise<void>;
     uploadFile(key: string, buffer: Buffer, mimeType: string): Promise<string>;
     getSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
+    getObject(key: string): Promise<Buffer>;
     deleteFile(key: string): Promise<void>;
 }
