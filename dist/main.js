@@ -65,10 +65,10 @@ async function bootstrap() {
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     });
-    const port = process.env.PORT || 3000;
+    const port = Number(process.env.PORT ?? 3000);
     await app.listen(port);
     const logger = new common_1.Logger('Bootstrap');
-    logger.log(`🚀 Reclaim Backend is running on http://localhost:${port}`);
+    logger.log(`Server listening on port ${port}`);
     logger.log(`🛡️  Helmet and CORS active | Files served via authenticated /api/files`);
     logger.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 }
