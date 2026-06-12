@@ -3,7 +3,13 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-healthcheckPath = "/api/health"
-healthcheckTimeout = 60
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3
+# NestJS startup chain: TypeORM pool + Redis/BullMQ workers + SpacesService
+# HeadBucket check + Puppeteer ready. 120 s gives enough runway on a cold
+# Railway container without masking genuine boot failures.
+healthcheckPath    = "/api/health"
+healthcheckTimeout = 120
+
+# ON_FAILURE with 5 retries: handles transient Puppeteer OOM kills and
+# brief Redis/Postgres unavailability during DO maintenance windows.
+restartPolicyType       = "ON_FAILURE"
+restartPolicyMaxRetries = 5
