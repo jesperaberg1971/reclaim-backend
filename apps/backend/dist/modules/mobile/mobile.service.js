@@ -26,6 +26,7 @@ const queue_constants_1 = require("../queue/queue.constants");
 const failure_messages_1 = require("../../common/utils/failure-messages");
 const receipt_image_util_1 = require("../../common/storage/receipt-image.util");
 const signed_url_service_1 = require("../../common/storage/signed-url.service");
+const file_storage_service_1 = require("../../common/storage/file-storage.service");
 const date_1 = require("../../common/utils/date");
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set([
@@ -53,11 +54,12 @@ const MAX_IDEM_KEY_LEN = 128;
 const IDEM_TTL_S = 86_400;
 exports.MAX_BATCH_SIZE = 10;
 let MobileService = MobileService_1 = class MobileService {
-    constructor(ocrQueue, expenseRepo, redisService, signedUrlService) {
+    constructor(ocrQueue, expenseRepo, redisService, signedUrlService, fileStorageService) {
         this.ocrQueue = ocrQueue;
         this.expenseRepo = expenseRepo;
         this.redisService = redisService;
         this.signedUrlService = signedUrlService;
+        this.fileStorageService = fileStorageService;
         this.logger = new common_1.Logger(MobileService_1.name);
     }
     async enqueueReceiptUpload(file, user, employeeId, idempotencyKey) {
@@ -90,7 +92,8 @@ let MobileService = MobileService_1 = class MobileService {
             throw new common_1.BadRequestException(`File is ${sizeMb} MB which exceeds the 20 MB limit. Please compress or resize your image.`);
         }
         const expenseId = (0, crypto_1.randomUUID)();
-        const imageUrl = await (0, receipt_image_util_1.saveReceiptImage)(file.buffer, file.mimetype, expenseId);
+        const imageKey = `receipts/${expenseId}.${(0, receipt_image_util_1.mimeToExt)(file.mimetype)}`;
+        const imageUrl = await this.fileStorageService.saveFile(imageKey, file.buffer, file.mimetype);
         const imageDoc = {
             type: 'receipt_image',
             url: imageUrl,
@@ -289,6 +292,7 @@ exports.MobileService = MobileService = MobileService_1 = __decorate([
     __metadata("design:paramtypes", [bullmq_2.Queue,
         expense_repository_1.ExpenseRepository,
         redis_service_1.RedisService,
-        signed_url_service_1.SignedUrlService])
+        signed_url_service_1.SignedUrlService,
+        file_storage_service_1.FileStorageService])
 ], MobileService);
 //# sourceMappingURL=mobile.service.js.map

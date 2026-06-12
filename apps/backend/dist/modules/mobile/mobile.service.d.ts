@@ -5,6 +5,7 @@ import { ExpenseStatus } from '../../database/entities/expense.entity';
 import { JwtPayload } from '../auth/dto/jwt-payload.interface';
 import { FailureMessage } from '../../common/utils/failure-messages';
 import { SignedUrlService } from '../../common/storage/signed-url.service';
+import { FileStorageService } from '../../common/storage/file-storage.service';
 export interface MobileExpenseItem {
     id: string;
     status: string;
@@ -69,8 +70,9 @@ export declare class MobileService {
     private readonly expenseRepo;
     private readonly redisService;
     private readonly signedUrlService;
+    private readonly fileStorageService;
     private readonly logger;
-    constructor(ocrQueue: Queue, expenseRepo: ExpenseRepository, redisService: RedisService, signedUrlService: SignedUrlService);
+    constructor(ocrQueue: Queue, expenseRepo: ExpenseRepository, redisService: RedisService, signedUrlService: SignedUrlService, fileStorageService: FileStorageService);
     enqueueReceiptUpload(file: Express.Multer.File, user: JwtPayload, employeeId?: string, idempotencyKey?: string): Promise<{
         expenseId: string;
         status: ExpenseStatus;

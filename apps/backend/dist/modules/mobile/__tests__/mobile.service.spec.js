@@ -3,11 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const common_1 = require("@nestjs/common");
 const mobile_service_1 = require("../mobile.service");
 const expense_entity_1 = require("../../../database/entities/expense.entity");
-jest.mock('../../../common/storage/receipt-image.util', () => ({
-    saveReceiptImage: jest.fn().mockResolvedValue('/api/files/receipts/test-id.jpg'),
-    mimeToExt: jest.fn().mockReturnValue('jpg'),
-}));
-const receipt_image_util_1 = require("../../../common/storage/receipt-image.util");
 const TENANT_ID = 'tenant-uuid-1';
 const CLIENT_ID = 'client-uuid-1';
 const EMPLOYEE_ID = 'employee-uuid-1';
@@ -53,12 +48,12 @@ function buildService() {
         cacheSet: jest.fn().mockResolvedValue(undefined),
     };
     const mockSignedUrlService = { getSignedUrl: jest.fn().mockImplementation((u) => Promise.resolve(u)) };
-    const service = new mobile_service_1.MobileService(mockQueue, mockRepo, mockRedis, mockSignedUrlService);
-    return { service, mockRepo, mockQueue, mockRedis, getSaved: () => savedStub };
+    const mockFileStorageService = { saveFile: jest.fn().mockResolvedValue('/api/files/receipts/test-id.jpg') };
+    const service = new mobile_service_1.MobileService(mockQueue, mockRepo, mockRedis, mockSignedUrlService, mockFileStorageService);
+    return { service, mockRepo, mockQueue, mockRedis, mockFileStorageService, getSaved: () => savedStub };
 }
 beforeEach(() => {
     jest.clearAllMocks();
-    receipt_image_util_1.saveReceiptImage.mockResolvedValue('/api/files/receipts/test-id.jpg');
 });
 describe('MobileService.enqueueReceiptUpload — success', () => {
     test('returns receipt_image_url in response', async () => {
@@ -126,8 +121,8 @@ describe('MobileService.enqueueReceiptUpload — validation', () => {
 });
 describe('MobileService.enqueueReceiptUpload — disk save failure', () => {
     test('propagates disk write error before creating expense or enqueueing OCR', async () => {
-        receipt_image_util_1.saveReceiptImage.mockRejectedValueOnce(new Error('ENOSPC: no space left on device'));
-        const { service, mockRepo, mockQueue } = buildService();
+        const { service, mockRepo, mockQueue, mockFileStorageService } = buildService();
+        mockFileStorageService.saveFile.mockRejectedValueOnce(new Error('ENOSPC: no space left on device'));
         await expect(service.enqueueReceiptUpload(makeFile(), makeUser())).rejects.toThrow('ENOSPC');
         expect(mockRepo.repository.create).not.toHaveBeenCalled();
         expect(mockQueue.add).not.toHaveBeenCalled();
@@ -328,11 +323,11 @@ describe('MobileService — idempotency key', () => {
         expect(mockRepo.repository.create).not.toHaveBeenCalled();
         expect(mockQueue.add).not.toHaveBeenCalled();
     });
-    test('cache hit: does NOT call saveReceiptImage on duplicate', async () => {
-        const { service, mockRedis } = buildService();
+    test('cache hit: does NOT call fileStorageService.saveFile on duplicate', async () => {
+        const { service, mockRedis, mockFileStorageService } = buildService();
         mockRedis.cacheGet = jest.fn().mockResolvedValue(CACHED_RESULT);
         await service.enqueueReceiptUpload(makeFile(), makeUser(), undefined, IDEM_KEY);
-        expect(receipt_image_util_1.saveReceiptImage).not.toHaveBeenCalled();
+        expect(mockFileStorageService.saveFile).not.toHaveBeenCalled();
     });
     test('cache miss: creates expense and stores result in cache', async () => {
         const { service, mockRedis } = buildService();

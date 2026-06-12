@@ -10,12 +10,13 @@ exports.PdfModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const pdf_service_1 = require("./pdf.service");
+const storage_module_1 = require("../../common/storage/storage.module");
 let PdfModule = class PdfModule {
 };
 exports.PdfModule = PdfModule;
 exports.PdfModule = PdfModule = __decorate([
     (0, common_1.Module)({
-        imports: [config_1.ConfigModule],
+        imports: [config_1.ConfigModule, storage_module_1.StorageModule],
         providers: [pdf_service_1.PdfService],
         exports: [pdf_service_1.PdfService],
     })

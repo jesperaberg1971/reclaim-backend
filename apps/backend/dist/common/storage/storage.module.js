@@ -10,13 +10,14 @@ exports.StorageModule = void 0;
 const common_1 = require("@nestjs/common");
 const spaces_service_1 = require("./spaces.service");
 const signed_url_service_1 = require("./signed-url.service");
+const file_storage_service_1 = require("./file-storage.service");
 let StorageModule = class StorageModule {
 };
 exports.StorageModule = StorageModule;
 exports.StorageModule = StorageModule = __decorate([
     (0, common_1.Module)({
-        providers: [spaces_service_1.SpacesService, signed_url_service_1.SignedUrlService],
-        exports: [spaces_service_1.SpacesService, signed_url_service_1.SignedUrlService],
+        providers: [spaces_service_1.SpacesService, signed_url_service_1.SignedUrlService, file_storage_service_1.FileStorageService],
+        exports: [spaces_service_1.SpacesService, signed_url_service_1.SignedUrlService, file_storage_service_1.FileStorageService],
     })
 ], StorageModule);
 //# sourceMappingURL=storage.module.js.map

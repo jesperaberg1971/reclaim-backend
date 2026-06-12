@@ -13,41 +13,33 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PdfService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
-const fs = require("fs");
-const path = require("path");
 const crypto_1 = require("crypto");
 const trip_decision_template_1 = require("./templates/trip-decision.template");
 const invoice_template_1 = require("./templates/invoice.template");
+const file_storage_service_1 = require("../../common/storage/file-storage.service");
 let PdfService = PdfService_1 = class PdfService {
-    constructor(config) {
+    constructor(config, fileStorageService) {
         this.config = config;
+        this.fileStorageService = fileStorageService;
         this.logger = new common_1.Logger(PdfService_1.name);
-        const base = path.resolve(process.cwd(), config.get('UPLOADS_DIR', 'uploads'));
-        this.tripDecisionsDir = path.join(base, 'trip-decisions');
-        this.invoicesDir = path.join(base, 'invoices');
-    }
-    onModuleInit() {
-        fs.mkdirSync(this.tripDecisionsDir, { recursive: true });
-        fs.mkdirSync(this.invoicesDir, { recursive: true });
-        this.logger.log(`PDF storage: ${this.tripDecisionsDir}`);
     }
     async generateInvoicePdf(data) {
         const filename = `${data.invoiceNumber.replace(/\//g, '-')}.pdf`;
-        const filepath = path.join(this.invoicesDir, filename);
-        const url = `/api/files/invoices/${filename}`;
+        const key = `invoices/${filename}`;
         const html = (0, invoice_template_1.buildInvoiceHtml)(data);
         const pdf = await this.renderPdf(html);
-        fs.writeFileSync(filepath, pdf);
+        const url = await this.fileStorageService.saveFile(key, pdf, 'application/pdf');
         this.logger.log(`Invoice PDF generated: ${filename} (${pdf.length} bytes)`);
         return { type: 'invoice_pdf', url, filename, generated_at: new Date().toISOString() };
     }
     async generateTripDecisionPdf(data) {
-        const filename = `TD-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${(0, crypto_1.randomUUID)().slice(0, 8)}.pdf`;
-        const filepath = path.join(this.tripDecisionsDir, filename);
-        const url = `/api/files/trip-decisions/${filename}`;
+        const year = new Date().getFullYear();
+        const month = String(new Date().getMonth() + 1).padStart(2, '0');
+        const filename = `TD-${year}-${month}-${(0, crypto_1.randomUUID)().slice(0, 8)}.pdf`;
+        const key = `trip-decisions/${filename}`;
         const html = (0, trip_decision_template_1.buildTripDecisionHtml)(data);
         const pdf = await this.renderPdf(html);
-        fs.writeFileSync(filepath, pdf);
+        const url = await this.fileStorageService.saveFile(key, pdf, 'application/pdf');
         this.logger.log(`Trip Decision PDF generated: ${filename} (${pdf.length} bytes)`);
         return { type: 'trip_decision_pdf', url, filename, generated_at: new Date().toISOString() };
     }
@@ -98,6 +90,7 @@ let PdfService = PdfService_1 = class PdfService {
 exports.PdfService = PdfService;
 exports.PdfService = PdfService = PdfService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [config_1.ConfigService])
+    __metadata("design:paramtypes", [config_1.ConfigService,
+        file_storage_service_1.FileStorageService])
 ], PdfService);
 //# sourceMappingURL=pdf.service.js.map
