@@ -170,6 +170,10 @@ let ReceiptProcessingService = ReceiptProcessingService_1 = class ReceiptProcess
             ]);
             return { empRow: emp, clientRow: client, existingDocs: current?.supporting_documents ?? [] };
         });
+        if (existingDocs.some((d) => d.type === 'trip_decision_pdf' && d.status === 'generated')) {
+            this.logger.log(`Trip Decision PDF already exists for expense ${expenseId} — skipping regeneration`);
+            return;
+        }
         const decisionNumber = String(Math.floor(Math.random() * 900) + 100);
         let logoUrl = null;
         let primaryColor = null;

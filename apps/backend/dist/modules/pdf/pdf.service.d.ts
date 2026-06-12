@@ -17,6 +17,8 @@ export declare class PdfService {
     constructor(config: ConfigService, fileStorageService: FileStorageService);
     generateInvoicePdf(data: InvoicePdfData): Promise<StoredPdfRef>;
     generateTripDecisionPdf(data: TripDecisionPdfData): Promise<StoredPdfRef>;
+    private validateTripDecisionData;
+    private renderPdfWithRetry;
     private renderPdf;
     private placeholderPdf;
 }
