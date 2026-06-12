@@ -6,21 +6,16 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HitlModule = void 0;
+exports.StorageModule = void 0;
 const common_1 = require("@nestjs/common");
-const hitl_controller_1 = require("./hitl.controller");
-const hitl_service_1 = require("./hitl.service");
-const receipt_module_1 = require("../receipt/receipt.module");
-const redis_module_1 = require("../../common/redis/redis.module");
-const storage_module_1 = require("../../common/storage/storage.module");
-let HitlModule = class HitlModule {
+const signed_url_service_1 = require("./signed-url.service");
+let StorageModule = class StorageModule {
 };
-exports.HitlModule = HitlModule;
-exports.HitlModule = HitlModule = __decorate([
+exports.StorageModule = StorageModule;
+exports.StorageModule = StorageModule = __decorate([
     (0, common_1.Module)({
-        imports: [receipt_module_1.ReceiptModule, redis_module_1.RedisModule, storage_module_1.StorageModule],
-        controllers: [hitl_controller_1.HitlController],
-        providers: [hitl_service_1.HitlService],
+        providers: [signed_url_service_1.SignedUrlService],
+        exports: [signed_url_service_1.SignedUrlService],
     })
-], HitlModule);
-//# sourceMappingURL=hitl.module.js.map
+], StorageModule);
+//# sourceMappingURL=storage.module.js.map

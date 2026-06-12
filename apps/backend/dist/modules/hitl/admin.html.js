@@ -667,7 +667,7 @@ function renderDetail(exp) {
       +'</div>'
     : '';
 
-  const imgUrl = exp.receipt_image_url || '';
+  const imgUrl = exp.receipt_image_signed_url || exp.receipt_image_url || '';
   const imageSection = '<div class="card" style="margin-bottom:16px">'
     +'<div class="card-title">🧾 Original Receipt</div>'
     +(imgUrl

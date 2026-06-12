@@ -39,7 +39,8 @@ function buildService(expenseExists = true) {
     const ds = {
         transaction: jest.fn().mockImplementation(async (cb) => cb({ query: queryMock })),
     };
-    const service = new hitl_service_1.HitlService(ds, mockReceiptService, mockRedis, mockAudit);
+    const mockSignedUrlService = { getSignedUrl: jest.fn().mockImplementation((u) => Promise.resolve(u)) };
+    const service = new hitl_service_1.HitlService(ds, mockReceiptService, mockRedis, mockAudit, mockSignedUrlService);
     return { service, queryMock };
 }
 beforeEach(() => jest.clearAllMocks());

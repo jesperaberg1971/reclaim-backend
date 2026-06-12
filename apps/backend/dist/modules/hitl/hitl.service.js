@@ -17,14 +17,16 @@ const decimal_js_1 = require("decimal.js");
 const receipt_processing_service_1 = require("../receipt/receipt-processing.service");
 const redis_service_1 = require("../../common/redis/redis.service");
 const audit_service_1 = require("../../common/audit/audit.service");
+const signed_url_service_1 = require("../../common/storage/signed-url.service");
 const bulk_action_dto_1 = require("./dto/bulk-action.dto");
 const expense_entity_1 = require("../../database/entities/expense.entity");
 let HitlService = HitlService_1 = class HitlService {
-    constructor(dataSource, receiptProcessingService, redisService, auditService) {
+    constructor(dataSource, receiptProcessingService, redisService, auditService, signedUrlService) {
         this.dataSource = dataSource;
         this.receiptProcessingService = receiptProcessingService;
         this.redisService = redisService;
         this.auditService = auditService;
+        this.signedUrlService = signedUrlService;
         this.logger = new common_1.Logger(HitlService_1.name);
     }
     async getQueue(tenantId) {
@@ -83,6 +85,10 @@ let HitlService = HitlService_1 = class HitlService {
       `, [expenseId]);
             if (!row)
                 throw new common_1.NotFoundException(`Expense ${expenseId} not found`);
+            const rawImageUrl = row.receipt_image_url ?? null;
+            const signedImageUrl = rawImageUrl
+                ? await this.signedUrlService.getSignedUrl(rawImageUrl)
+                : null;
             return {
                 id: row.id,
                 receipt_date: row.receipt_date,
@@ -94,7 +100,8 @@ let HitlService = HitlService_1 = class HitlService {
                 status: row.status,
                 gate_applied: Number(row.gate_applied ?? 0),
                 supporting_documents: row.supporting_documents ?? [],
-                receipt_image_url: row.receipt_image_url ?? null,
+                receipt_image_url: rawImageUrl,
+                receipt_image_signed_url: signedImageUrl,
                 already_processed: row.status !== expense_entity_1.ExpenseStatus.NEEDS_REVIEW,
                 created_at: row.created_at,
                 employee_name: row.employee_name,
@@ -247,6 +254,7 @@ exports.HitlService = HitlService = HitlService_1 = __decorate([
     __metadata("design:paramtypes", [typeorm_1.DataSource,
         receipt_processing_service_1.ReceiptProcessingService,
         redis_service_1.RedisService,
-        audit_service_1.AuditService])
+        audit_service_1.AuditService,
+        signed_url_service_1.SignedUrlService])
 ], HitlService);
 //# sourceMappingURL=hitl.service.js.map
