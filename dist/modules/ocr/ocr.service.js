@@ -36,8 +36,11 @@ let OcrService = OcrService_1 = class OcrService {
         this.config = config;
         this.logger = new common_1.Logger(OcrService_1.name);
         const location = config.get('GOOGLE_CLOUD_LOCATION', 'us');
+        const credsJson = config.get('GOOGLE_CREDENTIALS_JSON');
+        const credentials = credsJson ? JSON.parse(credsJson) : undefined;
         this.client = new documentai_1.DocumentProcessorServiceClient({
             apiEndpoint: `${location}-documentai.googleapis.com`,
+            ...(credentials && { credentials }),
         });
     }
     async extractFromImage(imageBuffer, mimeType = 'image/jpeg', attempt = 1) {
