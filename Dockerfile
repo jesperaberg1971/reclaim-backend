@@ -11,8 +11,9 @@ ENV NODE_ENV=production \
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-ARG CACHE_BUST=20260613-1500
+ARG CACHE_BUST=20260613-1510
 COPY dist ./dist
+RUN grep -c "isAllowedMime" dist/modules/mobile/mobile.controller.js && echo "MIME_FIX_OK" || echo "MIME_FIX_MISSING"
 
 RUN mkdir -p /tmp/uploads/receipts /tmp/uploads/trip-decisions /tmp/uploads/invoices \
     && chown -R appuser:appgroup /tmp/uploads
