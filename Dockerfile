@@ -11,7 +11,7 @@ ENV NODE_ENV=production \
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-ARG CACHE_BUST=20260613-1319
+ARG CACHE_BUST=20260613-1323
 COPY dist ./dist
 
 RUN mkdir -p /tmp/uploads/receipts /tmp/uploads/trip-decisions /tmp/uploads/invoices \

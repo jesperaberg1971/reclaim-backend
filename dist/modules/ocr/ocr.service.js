@@ -36,8 +36,17 @@ let OcrService = OcrService_1 = class OcrService {
         this.config = config;
         this.logger = new common_1.Logger(OcrService_1.name);
         const location = config.get('GOOGLE_CLOUD_LOCATION', 'us');
-        const credsJson = config.get('GOOGLE_CREDENTIALS_JSON');
-        const credentials = credsJson ? JSON.parse(credsJson) : undefined;
+        const credsRaw = config.get('GOOGLE_CREDENTIALS_JSON');
+        let credentials;
+        if (credsRaw) {
+            try {
+                const decoded = Buffer.from(credsRaw, 'base64').toString('utf8');
+                credentials = JSON.parse(decoded);
+            }
+            catch {
+                credentials = JSON.parse(credsRaw);
+            }
+        }
         this.client = new documentai_1.DocumentProcessorServiceClient({
             apiEndpoint: `${location}-documentai.googleapis.com`,
             ...(credentials && { credentials }),
