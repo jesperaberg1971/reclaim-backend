@@ -17,12 +17,8 @@ const common_1 = require("@nestjs/common");
 const platform_express_1 = require("@nestjs/platform-express");
 const passport_1 = require("@nestjs/passport");
 const mobile_service_1 = require("./mobile.service");
-const ALLOWED_MIME_TYPES = new Set([
-    'image/jpeg', 'image/jpg', 'image/png', 'image/tiff',
-    'image/bmp', 'image/webp', 'image/heic', 'image/heif',
-    'application/pdf',
-]);
-const ALLOWED_TYPES_DISPLAY = 'JPEG, PNG, HEIC, WebP, TIFF, BMP, or PDF';
+const isAllowedMime = (mime) => mime.startsWith('image/') || mime === 'application/pdf';
+const ALLOWED_TYPES_DISPLAY = 'any image format or PDF';
 let MobileController = class MobileController {
     constructor(mobileService) {
         this.mobileService = mobileService;
@@ -69,7 +65,7 @@ __decorate([
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('image', {
         limits: { fileSize: 20 * 1024 * 1024, files: 1 },
         fileFilter: (_req, file, cb) => {
-            if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
+            if (isAllowedMime(file.mimetype)) {
                 cb(null, true);
             }
             else {
