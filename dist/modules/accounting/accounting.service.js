@@ -20,6 +20,7 @@ const storage_1 = require("@google-cloud/storage");
 const notifications_service_1 = require("../notifications/notifications.service");
 const redis_service_1 = require("../../common/redis/redis.service");
 const signed_url_service_1 = require("../../common/storage/signed-url.service");
+const spaces_service_1 = require("../../common/storage/spaces.service");
 const DASHBOARD_CACHE_TTL = 120;
 const EXPORTS_CACHE_TTL = 300;
 const ANALYTICS_CACHE_TTL = 300;
@@ -54,11 +55,12 @@ const GATE_EXPLAIN = {
     3: 'Nhân viên thanh toán bằng thẻ cá nhân và được hoàn ứng. Phiếu chi được tạo tự động.',
 };
 let AccountingService = class AccountingService {
-    constructor(dataSource, notificationsService, redisService, signedUrlService) {
+    constructor(dataSource, notificationsService, redisService, signedUrlService, spacesService) {
         this.dataSource = dataSource;
         this.notificationsService = notificationsService;
         this.redisService = redisService;
         this.signedUrlService = signedUrlService;
+        this.spacesService = spacesService;
     }
     async listExpenses(tenantId, filters) {
         return this.dataSource.transaction(async (manager) => {
@@ -335,7 +337,9 @@ let AccountingService = class AccountingService {
         const headers = [
             'expense_id', 'receipt_date', 'employee_name', 'employee_id', 'client_name',
             'vendor', 'original_amount_vnd', 'deductible_amount_vnd', 'non_deductible_amount_vnd',
+            'vat_amount_vnd',
             'currency', 'gate_applied', 'gate_name', 'gate_reasoning',
+            'accounting_debit', 'accounting_credit',
             'final_category', 'pit_flag', 'pit_reason',
             'approval_decision', 'status', 'supporting_documents',
         ];
@@ -346,6 +350,10 @@ let AccountingService = class AccountingService {
             const nonDed = orig.minus(ded).gt(0) ? orig.minus(ded).toFixed(0) : '0';
             const gate = Number(r.gate_applied);
             const meta = GATE_CSV_META[gate] ?? { name: `Gate ${gate}`, reasoning: '' };
+            const acct = GATE_LABELS[gate] ?? { debit: '—', credit: '—' };
+            const vatVnd = r.ocr_raw_json?.vat_amount != null
+                ? String(r.ocr_raw_json.vat_amount)
+                : '';
             const docs = r.supporting_documents ?? [];
             const docList = docs
                 .map(d => `${d.type}:${d.filename ?? path.basename(String(d.url ?? ''))}`)
@@ -360,10 +368,13 @@ let AccountingService = class AccountingService {
                 csvEsc(orig.toFixed(0)),
                 csvEsc(ded.toFixed(0)),
                 csvEsc(nonDed),
+                csvEsc(vatVnd),
                 csvEsc(r.currency ?? 'VND'),
                 csvEsc(gate),
                 csvEsc(meta.name),
                 csvEsc(meta.reasoning),
+                csvEsc(acct.debit),
+                csvEsc(acct.credit),
                 csvEsc(r.final_category ?? ''),
                 csvEsc(r.pit_flag ? 'yes' : 'no'),
                 csvEsc(r.pit_flag ? 'Amount exceeds tax-free limit — excess subject to personal income tax' : ''),
@@ -905,6 +916,14 @@ let AccountingService = class AccountingService {
                     return null;
                 }
             }
+            if (process.env.STORAGE_PROVIDER === 'spaces') {
+                try {
+                    return await this.spacesService.getObject(rel);
+                }
+                catch {
+                    return null;
+                }
+            }
             const abs = path.join(uploadsDir, rel);
             if (!abs.startsWith(uploadsDir + path.sep) || !fs.existsSync(abs))
                 return null;
@@ -996,7 +1015,8 @@ exports.AccountingService = AccountingService = __decorate([
     __metadata("design:paramtypes", [typeorm_1.DataSource,
         notifications_service_1.NotificationsService,
         redis_service_1.RedisService,
-        signed_url_service_1.SignedUrlService])
+        signed_url_service_1.SignedUrlService,
+        spaces_service_1.SpacesService])
 ], AccountingService);
 function safeName(s) {
     return String(s ?? '')

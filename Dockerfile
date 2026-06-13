@@ -11,9 +11,10 @@ ENV NODE_ENV=production \
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-ARG CACHE_BUST=20260613-1600
+ARG CACHE_BUST=20260613-2200
 COPY dist ./dist
-RUN grep -c "isAllowedMime" dist/modules/mobile/mobile.controller.js && echo "MIME_FIX_OK" || echo "MIME_FIX_MISSING"
+RUN grep -c "SpacesService" dist/modules/accounting/accounting.service.js && echo "SPACES_FIX_OK" || echo "SPACES_FIX_MISSING"
+RUN grep -c "accounting_debit" dist/modules/accounting/accounting.service.js && echo "CSV_FIX_OK" || echo "CSV_FIX_MISSING"
 
 RUN mkdir -p /tmp/uploads/receipts /tmp/uploads/trip-decisions /tmp/uploads/invoices \
     && chown -R appuser:appgroup /tmp/uploads

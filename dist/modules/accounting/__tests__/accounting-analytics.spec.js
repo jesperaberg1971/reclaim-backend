@@ -24,7 +24,7 @@ function buildService(impl) {
         query: queryMock,
     };
     const mockSignedUrlService = { getSignedUrl: jest.fn().mockImplementation((u) => Promise.resolve(u)) };
-    return new accounting_service_1.AccountingService(ds, mockNotifications, mockRedis, mockSignedUrlService);
+    return new accounting_service_1.AccountingService(ds, mockNotifications, mockRedis, mockSignedUrlService, null);
 }
 beforeEach(() => jest.clearAllMocks());
 describe('AccountingService.getSpendingBreakdown', () => {

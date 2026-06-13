@@ -2,6 +2,7 @@ import { DataSource } from 'typeorm';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RedisService } from '../../common/redis/redis.service';
 import { SignedUrlService } from '../../common/storage/signed-url.service';
+import { SpacesService } from '../../common/storage/spaces.service';
 export interface ExpenseFilters {
     from?: string;
     to?: string;
@@ -181,7 +182,8 @@ export declare class AccountingService {
     private readonly notificationsService;
     private readonly redisService;
     private readonly signedUrlService;
-    constructor(dataSource: DataSource, notificationsService: NotificationsService, redisService: RedisService, signedUrlService: SignedUrlService);
+    private readonly spacesService;
+    constructor(dataSource: DataSource, notificationsService: NotificationsService, redisService: RedisService, signedUrlService: SignedUrlService, spacesService: SpacesService);
     listExpenses(tenantId: string, filters: ExpenseFilters): Promise<PagedExpenses>;
     getExpenseDetail(expenseId: string, tenantId: string): Promise<AccountingExpenseDetail>;
     listClients(tenantId: string): Promise<{

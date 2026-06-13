@@ -53,7 +53,7 @@ function buildService(overrideImpl) {
         query: queryMock,
     };
     const mockSignedUrlService = { getSignedUrl: jest.fn().mockImplementation((u) => Promise.resolve(u)) };
-    const service = new accounting_service_1.AccountingService(ds, mockNotifications, mockRedis, mockSignedUrlService);
+    const service = new accounting_service_1.AccountingService(ds, mockNotifications, mockRedis, mockSignedUrlService, null);
     return { service, queryMock };
 }
 beforeEach(() => jest.clearAllMocks());
