@@ -89,6 +89,7 @@ let OcrService = OcrService_1 = class OcrService {
         const find = (type) => entities.find((e) => e.type === type);
         const supplierEntity = find('supplier_name');
         const amountEntity = find('total_amount');
+        const vatEntity = find('total_tax_amount');
         const dateEntity = find('invoice_date');
         const currencyEntity = find('currency');
         const amountMoney = amountEntity?.normalizedValue?.moneyValue;
@@ -101,6 +102,18 @@ let OcrService = OcrService_1 = class OcrService {
         }
         if (amount === 0 && rawText) {
             amount = extractLargestAmountFromText(rawText);
+        }
+        let vatAmount = null;
+        if (vatEntity) {
+            const vatMoney = vatEntity.normalizedValue?.moneyValue;
+            if (vatMoney?.units) {
+                vatAmount = parseInt(vatMoney.units, 10) + (vatMoney.nanos ?? 0) / 1e9;
+            }
+            else if (vatEntity.mentionText) {
+                const parsed = parseVietnameseAmount(vatEntity.mentionText);
+                if (parsed > 0)
+                    vatAmount = parsed;
+            }
         }
         let date = new Date().toISOString();
         let dateFallback = true;
@@ -186,6 +199,7 @@ let OcrService = OcrService_1 = class OcrService {
         return {
             vendor,
             amount,
+            vat_amount: vatAmount,
             currency,
             date,
             rawText,

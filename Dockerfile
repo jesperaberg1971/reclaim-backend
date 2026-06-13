@@ -11,7 +11,7 @@ ENV NODE_ENV=production \
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-ARG CACHE_BUST=20260613-2200
+ARG CACHE_BUST=20260613-2300
 COPY dist ./dist
 RUN grep -c "SpacesService" dist/modules/accounting/accounting.service.js && echo "SPACES_FIX_OK" || echo "SPACES_FIX_MISSING"
 RUN grep -c "accounting_debit" dist/modules/accounting/accounting.service.js && echo "CSV_FIX_OK" || echo "CSV_FIX_MISSING"

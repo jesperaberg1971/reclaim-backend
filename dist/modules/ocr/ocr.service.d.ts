@@ -3,6 +3,7 @@ import { OcrDiagnostics } from './ocr-failure.types';
 export interface OcrResult {
     vendor: string | null;
     amount: number;
+    vat_amount: number | null;
     currency: string;
     date: string;
     rawText: string;
