@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReceiptModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
+const bullmq_1 = require("@nestjs/bullmq");
 const nestjs_cls_1 = require("nestjs-cls");
 const redis_module_1 = require("../../common/redis/redis.module");
 const receipt_processing_service_1 = require("./receipt-processing.service");
@@ -20,9 +21,8 @@ const trip_decision_entity_1 = require("../../database/entities/trip-decision.en
 const partner_entity_1 = require("../../database/entities/partner.entity");
 const welfare_balance_entity_1 = require("../../database/entities/welfare-balance.entity");
 const employee_bank_account_entity_1 = require("../../database/entities/employee-bank-account.entity");
-const pdf_module_1 = require("../pdf/pdf.module");
 const notifications_module_1 = require("../notifications/notifications.module");
-const branding_module_1 = require("../branding/branding.module");
+const queue_constants_1 = require("../queue/queue.constants");
 let ReceiptModule = class ReceiptModule {
 };
 exports.ReceiptModule = ReceiptModule;
@@ -30,11 +30,10 @@ exports.ReceiptModule = ReceiptModule = __decorate([
     (0, common_1.Module)({
         imports: [
             typeorm_1.TypeOrmModule.forFeature([expense_entity_1.Expense, trip_decision_entity_1.TripDecision, partner_entity_1.Partner, welfare_balance_entity_1.WelfareBalance, employee_bank_account_entity_1.EmployeeBankAccount]),
+            bullmq_1.BullModule.registerQueue({ name: queue_constants_1.PDF_GENERATION_QUEUE }),
             nestjs_cls_1.ClsModule,
             redis_module_1.RedisModule,
-            pdf_module_1.PdfModule,
             notifications_module_1.NotificationsModule,
-            branding_module_1.BrandingModule,
         ],
         providers: [
             receipt_processing_service_1.ReceiptProcessingService,

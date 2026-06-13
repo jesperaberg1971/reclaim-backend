@@ -177,6 +177,12 @@ function buildAdminHtml() {
   .ent-table tr:last-child td { border-bottom:none; }
   .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
 
+  /* Receipt image states */
+  .img-placeholder { padding:32px 20px; text-align:center; color:var(--muted);
+                     background:var(--bg); border-radius:6px; font-size:13px; }
+  .img-error { padding:14px 16px; background:#fee2e2; border:1px solid #fca5a5;
+               border-radius:6px; font-size:13px; color:#991b1b; line-height:1.7; }
+
   /* Login */
   #login-screen { display:flex; align-items:center; justify-content:center;
                   min-height:100vh; background:var(--bg); }
@@ -631,7 +637,85 @@ function renderDetail(exp) {
           +'<td>'+Math.round((e.confidence??0)*100)+'%</td></tr>';
   }).join('');
 
+  const alreadyBanner = exp.already_processed
+    ? '<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:12px 14px;'
+      +'margin-bottom:16px;font-size:13px">ℹ️ <strong>This item has already been processed</strong>'
+      +' — Status: <strong>'+esc(exp.status||'')+'</strong>. Actions below will re-process it.</div>'
+    : '';
+
+  // ── Trip Decision PDF section (Gate 1 only) ──────────────────────────────
+  const docs = exp.supporting_documents || [];
+  const tripPdfEntry = docs.find(d => d.type === 'trip_decision_pdf');
+  const pdfGenerated = tripPdfEntry?.status === 'generated' ? tripPdfEntry : null;
+  const pdfQueued    = tripPdfEntry?.status === 'queued'    ? tripPdfEntry : null;
+  const pdfFailed    = tripPdfEntry?.status === 'failed'    ? tripPdfEntry : null;
+  const pdfHref      = pdfGenerated ? (pdfGenerated.signed_url || pdfGenerated.url) : null;
+
+  const BADGE_BASE = 'font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;';
+  const pdfBadge = pdfGenerated
+    ? '<span style="'+BADGE_BASE+'background:#dcfce7;color:#166534">✓ Generated</span>'
+    : pdfQueued
+      ? '<span style="'+BADGE_BASE+'background:#dbeafe;color:#1e40af">⏳ In Progress</span>'
+      : pdfFailed
+        ? '<span style="'+BADGE_BASE+'background:#fee2e2;color:#991b1b">✗ Failed</span>'
+        : '<span style="'+BADGE_BASE+'background:#fef9c3;color:#854d0e">⏳ Pending</span>';
+
+  const pdfBody = pdfGenerated
+    ? '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px">'
+      +'<a href="'+escA(pdfHref)+'" target="_blank" '
+      +'style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;'
+      +'background:#1a56db;color:#fff;border-radius:6px;font-size:13px;font-weight:600;'
+      +'text-decoration:none">⬇ Download PDF</a>'
+      +(pdfGenerated.filename
+        ? '<span style="font-size:12px;color:var(--muted)">'+esc(pdfGenerated.filename)+'</span>'
+        : '')
+      +'<span style="font-size:12px;color:var(--muted)">'
+      +(pdfGenerated.generated_at ? 'Generated '+new Date(pdfGenerated.generated_at).toLocaleString('vi-VN') : '')
+      +'</span>'
+      +'</div>'
+    : pdfQueued
+      ? '<div style="margin-top:8px;font-size:12px;color:#1e40af">'
+        +'PDF generation is in progress. Refresh in a few moments.'
+        +'</div>'
+      : pdfFailed
+        ? '<div style="margin-top:8px;font-size:12px">'
+          +'<div style="color:#7f1d1d"><strong>Error:</strong> '+esc(pdfFailed.error_message ?? 'Unknown error')+'</div>'
+          +(pdfFailed.failed_at
+            ? '<div style="color:#991b1b;margin-top:3px">Failed at '
+              +new Date(pdfFailed.failed_at).toLocaleString('vi-VN')+'</div>'
+            : '')
+          +'<div style="color:#92400e;margin-top:4px">Will retry automatically.</div>'
+          +'</div>'
+        : '<div style="margin-top:8px;font-size:12px;color:#92400e">'
+          +'Will be generated automatically when this expense passes Gate 1 processing.'
+          +'</div>';
+
+  const pdfSection = exp.gate_applied === 1
+    ? '<div class="card" style="margin-bottom:16px">'
+      +'<div style="display:flex;align-items:center;gap:10px">'
+      +'<span class="card-title" style="margin:0">📄 Trip Decision PDF</span>'
+      +pdfBadge
+      +'</div>'
+      +pdfBody
+      +'</div>'
+    : '';
+
+  const imgUrl = exp.receipt_image_signed_url || exp.receipt_image_url || '';
+  const imageSection = '<div class="card" style="margin-bottom:16px">'
+    +'<div class="card-title">🧾 Original Receipt</div>'
+    +(imgUrl
+      ? '<img src="'+escA(imgUrl)+'" data-src="'+escA(imgUrl)+'" onerror="handleImgError(this)"'
+        +' style="width:100%;max-width:600px;border-radius:6px;border:1px solid var(--border);display:block;cursor:zoom-in"'
+        +' alt="Receipt image">'
+        +'<div style="margin-top:10px">'
+        +'<a href="'+escA(imgUrl)+'" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none;font-size:12px">↗ Open in new tab</a>'
+        +'</div>'
+      : '<div class="img-placeholder">📎 No receipt image available</div>'
+    )
+    +'</div>';
+
   document.getElementById('det-body').innerHTML =
+    alreadyBanner + pdfSection + imageSection +
 
     // Header
     '<div class="exp-hdr">'
@@ -699,6 +783,17 @@ function renderDetail(exp) {
         +'<div>Đã duyệt lúc: '+(ocr.reviewed_at||'—')+'</div>'
         +(ocr.reviewer_notes?'<div>Ghi chú: '+esc(ocr.reviewer_notes)+'</div>':'')
         +'</div></details>' : '');
+}
+
+// ── Image error handler ────────────────────────────────────────────────────
+function handleImgError(img) {
+  const url = img.getAttribute('data-src') || img.src;
+  const div = document.createElement('div');
+  div.className = 'img-error';
+  div.innerHTML = '⚠️ Failed to load receipt image<br>'
+    +'<small style="word-break:break-all;opacity:.8">'+esc(url)+'</small><br>'
+    +'<a href="'+escA(url)+'" target="_blank" style="color:var(--danger);font-size:12px">Try opening directly →</a>';
+  img.parentNode.replaceChild(div, img);
 }
 
 // ── Actions ────────────────────────────────────────────────────────────────

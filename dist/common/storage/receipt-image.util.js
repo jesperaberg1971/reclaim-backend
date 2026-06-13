@@ -5,7 +5,6 @@ exports.mimeToExt = mimeToExt;
 exports.saveReceiptImage = saveReceiptImage;
 const fs = require("fs");
 const path = require("path");
-const storage_1 = require("@google-cloud/storage");
 exports.MIME_TO_EXT = {
     'image/jpeg': 'jpg',
     'image/png': 'png',
@@ -21,18 +20,6 @@ async function saveReceiptImage(buffer, mimeType, expenseId, uploadsDir = proces
     const ext = mimeToExt(mimeType);
     const filename = `${expenseId}.${ext}`;
     const relPath = `receipts/${filename}`;
-    const bucketName = process.env.GCS_BUCKET_NAME;
-    if (bucketName) {
-        await new storage_1.Storage()
-            .bucket(bucketName)
-            .file(relPath)
-            .save(buffer, {
-            contentType: mimeType,
-            resumable: false,
-            metadata: { cacheControl: 'private, max-age=3600' },
-        });
-        return `/api/files/${relPath}`;
-    }
     const dir = path.join(uploadsDir, 'receipts');
     await fs.promises.mkdir(dir, { recursive: true });
     await fs.promises.writeFile(path.join(dir, filename), buffer);

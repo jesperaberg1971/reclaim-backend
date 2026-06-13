@@ -3,6 +3,7 @@ import { Decimal } from 'decimal.js';
 import { ReceiptProcessingService } from '../receipt/receipt-processing.service';
 import { RedisService } from '../../common/redis/redis.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { SignedUrlService } from '../../common/storage/signed-url.service';
 import { OcrCorrectionDto } from './dto/ocr-correction.dto';
 import { BulkActionType } from './dto/bulk-action.dto';
 export declare class HitlService {
@@ -10,13 +11,15 @@ export declare class HitlService {
     private readonly receiptProcessingService;
     private readonly redisService;
     private readonly auditService;
+    private readonly signedUrlService;
     private readonly logger;
-    constructor(dataSource: DataSource, receiptProcessingService: ReceiptProcessingService, redisService: RedisService, auditService: AuditService);
+    constructor(dataSource: DataSource, receiptProcessingService: ReceiptProcessingService, redisService: RedisService, auditService: AuditService, signedUrlService: SignedUrlService);
     getQueue(tenantId: string): Promise<ReviewQueueItem[]>;
     getDetail(expenseId: string, tenantId: string): Promise<ExpenseDetail>;
     applyCorrection(expenseId: string, tenantId: string, dto: OcrCorrectionDto, userId?: string, ipAddress?: string): Promise<CorrectionResult>;
     rejectExpense(expenseId: string, tenantId: string, reason?: string, userId?: string, ipAddress?: string): Promise<void>;
     bulkAction(expenseIds: string[], action: BulkActionType, tenantId: string, reviewerNotes?: string, userId?: string, ipAddress?: string): Promise<BulkResult>;
+    private bulkApproveOne;
     getOcrMetrics(period?: string): Promise<import("../../common/redis/redis.service").OcrMetrics>;
 }
 export interface ReviewQueueItem {
@@ -33,7 +36,12 @@ export interface ReviewQueueItem {
 export interface ExpenseDetail extends ReviewQueueItem {
     ocr_raw_json: any;
     status: string;
+    gate_applied: number;
+    supporting_documents: any[];
     employee_internal_id: string | null;
+    receipt_image_url: string | null;
+    receipt_image_signed_url: string | null;
+    already_processed: boolean;
 }
 export interface CorrectionResult {
     expenseId: string;

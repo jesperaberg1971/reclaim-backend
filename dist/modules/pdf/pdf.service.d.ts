@@ -1,23 +1,24 @@
-import { OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TripDecisionPdfData } from './templates/trip-decision.template';
 import { InvoicePdfData } from './templates/invoice.template';
+import { FileStorageService } from '../../common/storage/file-storage.service';
 export { TripDecisionPdfData, InvoicePdfData };
 export interface StoredPdfRef {
     type: 'trip_decision_pdf' | 'invoice_pdf';
+    status: 'generated';
     url: string;
     filename: string;
     generated_at: string;
 }
-export declare class PdfService implements OnModuleInit {
+export declare class PdfService {
     private readonly config;
+    private readonly fileStorageService;
     private readonly logger;
-    private readonly tripDecisionsDir;
-    private readonly invoicesDir;
-    constructor(config: ConfigService);
-    onModuleInit(): void;
+    constructor(config: ConfigService, fileStorageService: FileStorageService);
     generateInvoicePdf(data: InvoicePdfData): Promise<StoredPdfRef>;
     generateTripDecisionPdf(data: TripDecisionPdfData): Promise<StoredPdfRef>;
+    private validateTripDecisionData;
+    private renderPdfWithRetry;
     private renderPdf;
     private placeholderPdf;
 }

@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RedisService } from '../../common/redis/redis.service';
+import { SignedUrlService } from '../../common/storage/signed-url.service';
 export interface ExpenseFilters {
     from?: string;
     to?: string;
@@ -8,6 +9,7 @@ export interface ExpenseFilters {
     employeeId?: string;
     gate?: number;
     status?: 'all' | 'pending_export' | 'exported';
+    statusFilter?: 'needs_review' | 'approved' | 'rejected' | 'erp_exported';
     approvalDecision?: 'pending' | 'approved' | 'rejected';
     search?: string;
     page?: number;
@@ -36,6 +38,7 @@ export interface AccountingExpense {
     pit_flag: boolean;
     erp_exported: boolean;
     status: string;
+    review_reason: string | null;
     supporting_documents: any[];
     has_voucher: boolean;
     accountant_reviewed_at: string | null;
@@ -48,9 +51,12 @@ export interface AccountingExpenseDetail extends AccountingExpense {
     gate_explanation: string;
     accounting_debit: string;
     accounting_credit: string;
+    overflow_amount_vnd: string | null;
     ocr_vendor: string | null;
     ocr_confidence: number;
     child_ids: string[];
+    receipt_image_url: string | null;
+    receipt_image_signed_url: string | null;
     voucher: {
         voucher_number: string;
         amount_vnd: string;
@@ -174,7 +180,8 @@ export declare class AccountingService {
     private readonly dataSource;
     private readonly notificationsService;
     private readonly redisService;
-    constructor(dataSource: DataSource, notificationsService: NotificationsService, redisService: RedisService);
+    private readonly signedUrlService;
+    constructor(dataSource: DataSource, notificationsService: NotificationsService, redisService: RedisService, signedUrlService: SignedUrlService);
     listExpenses(tenantId: string, filters: ExpenseFilters): Promise<PagedExpenses>;
     getExpenseDetail(expenseId: string, tenantId: string): Promise<AccountingExpenseDetail>;
     listClients(tenantId: string): Promise<{
@@ -183,6 +190,8 @@ export declare class AccountingService {
     }[]>;
     getPeriodSummary(tenantId: string, from: string, to: string, clientId?: string): Promise<PeriodSummary>;
     private toExpense;
+    private buildExpenseCsv;
+    private buildReviewReason;
     listEmployees(tenantId: string): Promise<{
         id: string;
         name: string;

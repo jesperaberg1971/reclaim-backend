@@ -13,43 +13,81 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PdfService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
-const fs = require("fs");
-const path = require("path");
 const crypto_1 = require("crypto");
 const trip_decision_template_1 = require("./templates/trip-decision.template");
 const invoice_template_1 = require("./templates/invoice.template");
+const file_storage_service_1 = require("../../common/storage/file-storage.service");
+const PDF_RENDER_TIMEOUT_MS = 30_000;
+const PDF_MAX_ATTEMPTS = 2;
+const PDF_RETRY_DELAY_MS = 1_000;
 let PdfService = PdfService_1 = class PdfService {
-    constructor(config) {
+    constructor(config, fileStorageService) {
         this.config = config;
+        this.fileStorageService = fileStorageService;
         this.logger = new common_1.Logger(PdfService_1.name);
-        const base = path.resolve(process.cwd(), config.get('UPLOADS_DIR', 'uploads'));
-        this.tripDecisionsDir = path.join(base, 'trip-decisions');
-        this.invoicesDir = path.join(base, 'invoices');
-    }
-    onModuleInit() {
-        fs.mkdirSync(this.tripDecisionsDir, { recursive: true });
-        fs.mkdirSync(this.invoicesDir, { recursive: true });
-        this.logger.log(`PDF storage: ${this.tripDecisionsDir}`);
     }
     async generateInvoicePdf(data) {
         const filename = `${data.invoiceNumber.replace(/\//g, '-')}.pdf`;
-        const filepath = path.join(this.invoicesDir, filename);
-        const url = `/api/files/invoices/${filename}`;
+        const key = `invoices/${filename}`;
         const html = (0, invoice_template_1.buildInvoiceHtml)(data);
-        const pdf = await this.renderPdf(html);
-        fs.writeFileSync(filepath, pdf);
+        const pdf = await this.renderPdfWithRetry(html);
+        const url = await this.fileStorageService.saveFile(key, pdf, 'application/pdf');
         this.logger.log(`Invoice PDF generated: ${filename} (${pdf.length} bytes)`);
-        return { type: 'invoice_pdf', url, filename, generated_at: new Date().toISOString() };
+        return { type: 'invoice_pdf', status: 'generated', url, filename, generated_at: new Date().toISOString() };
     }
     async generateTripDecisionPdf(data) {
-        const filename = `TD-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${(0, crypto_1.randomUUID)().slice(0, 8)}.pdf`;
-        const filepath = path.join(this.tripDecisionsDir, filename);
-        const url = `/api/files/trip-decisions/${filename}`;
+        this.validateTripDecisionData(data);
+        const year = new Date().getFullYear();
+        const month = String(new Date().getMonth() + 1).padStart(2, '0');
+        const filename = `TD-${year}-${month}-${(0, crypto_1.randomUUID)().slice(0, 8)}.pdf`;
+        const key = `trip-decisions/${filename}`;
         const html = (0, trip_decision_template_1.buildTripDecisionHtml)(data);
-        const pdf = await this.renderPdf(html);
-        fs.writeFileSync(filepath, pdf);
+        const pdf = await this.renderPdfWithRetry(html);
+        const url = await this.fileStorageService.saveFile(key, pdf, 'application/pdf');
         this.logger.log(`Trip Decision PDF generated: ${filename} (${pdf.length} bytes)`);
-        return { type: 'trip_decision_pdf', url, filename, generated_at: new Date().toISOString() };
+        return { type: 'trip_decision_pdf', status: 'generated', url, filename, generated_at: new Date().toISOString() };
+    }
+    validateTripDecisionData(data) {
+        const missing = [];
+        if (!data.decisionNumber?.trim())
+            missing.push('decisionNumber');
+        if (!data.companyName?.trim())
+            missing.push('companyName');
+        if (!data.employeeFullName?.trim())
+            missing.push('employeeFullName');
+        if (!data.destination?.trim())
+            missing.push('destination');
+        if (!data.purpose?.trim())
+            missing.push('purpose');
+        if (!(data.startDate instanceof Date) || isNaN(data.startDate.getTime()))
+            missing.push('startDate (invalid)');
+        if (!(data.endDate instanceof Date) || isNaN(data.endDate.getTime()))
+            missing.push('endDate (invalid)');
+        if (data.startDate instanceof Date && !isNaN(data.startDate.getTime()) &&
+            data.endDate instanceof Date && !isNaN(data.endDate.getTime()) &&
+            data.endDate < data.startDate)
+            missing.push('endDate must be ≥ startDate');
+        if (!data.dailyAllowanceVnd || data.dailyAllowanceVnd.lt(0))
+            missing.push('dailyAllowanceVnd (must be ≥ 0)');
+        if (missing.length > 0) {
+            throw new Error(`Trip Decision PDF — missing/invalid fields: ${missing.join(', ')}`);
+        }
+    }
+    async renderPdfWithRetry(html) {
+        let lastErr;
+        for (let attempt = 1; attempt <= PDF_MAX_ATTEMPTS; attempt++) {
+            try {
+                return await this.renderPdf(html);
+            }
+            catch (err) {
+                lastErr = err;
+                if (attempt < PDF_MAX_ATTEMPTS) {
+                    this.logger.warn(`PDF render attempt ${attempt}/${PDF_MAX_ATTEMPTS} failed: ${err.message} — retrying in ${PDF_RETRY_DELAY_MS}ms`);
+                    await new Promise((r) => setTimeout(r, PDF_RETRY_DELAY_MS));
+                }
+            }
+        }
+        throw new Error(`PDF generation failed after ${PDF_MAX_ATTEMPTS} attempts: ${lastErr?.message}`);
     }
     async renderPdf(html) {
         const puppeteer = await Promise.resolve().then(() => require('puppeteer')).catch(() => null);
@@ -69,7 +107,7 @@ let PdfService = PdfService_1 = class PdfService {
         });
         try {
             const page = await browser.newPage();
-            await page.setContent(html, { waitUntil: 'networkidle0' });
+            await page.setContent(html, { waitUntil: 'networkidle0', timeout: PDF_RENDER_TIMEOUT_MS });
             const pdf = await page.pdf({
                 format: 'A4',
                 printBackground: true,
@@ -77,8 +115,11 @@ let PdfService = PdfService_1 = class PdfService {
             });
             return Buffer.from(pdf);
         }
+        catch (err) {
+            throw new Error(`Puppeteer render error: ${err.message}`);
+        }
         finally {
-            await browser.close();
+            await browser.close().catch(() => { });
         }
     }
     placeholderPdf() {
@@ -98,6 +139,7 @@ let PdfService = PdfService_1 = class PdfService {
 exports.PdfService = PdfService;
 exports.PdfService = PdfService = PdfService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [config_1.ConfigService])
+    __metadata("design:paramtypes", [config_1.ConfigService,
+        file_storage_service_1.FileStorageService])
 ], PdfService);
 //# sourceMappingURL=pdf.service.js.map

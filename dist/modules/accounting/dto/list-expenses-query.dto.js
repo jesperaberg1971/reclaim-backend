@@ -50,6 +50,11 @@ __decorate([
 ], ListExpensesQueryDto.prototype, "status", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(['needs_review', 'approved', 'rejected', 'erp_exported']),
+    __metadata("design:type", String)
+], ListExpensesQueryDto.prototype, "statusFilter", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsIn)(['pending', 'approved', 'rejected']),
     __metadata("design:type", String)
 ], ListExpensesQueryDto.prototype, "approvalDecision", void 0);

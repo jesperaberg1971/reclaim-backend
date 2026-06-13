@@ -17,14 +17,16 @@ const decimal_js_1 = require("decimal.js");
 const receipt_processing_service_1 = require("../receipt/receipt-processing.service");
 const redis_service_1 = require("../../common/redis/redis.service");
 const audit_service_1 = require("../../common/audit/audit.service");
+const signed_url_service_1 = require("../../common/storage/signed-url.service");
 const bulk_action_dto_1 = require("./dto/bulk-action.dto");
 const expense_entity_1 = require("../../database/entities/expense.entity");
 let HitlService = HitlService_1 = class HitlService {
-    constructor(dataSource, receiptProcessingService, redisService, auditService) {
+    constructor(dataSource, receiptProcessingService, redisService, auditService, signedUrlService) {
         this.dataSource = dataSource;
         this.receiptProcessingService = receiptProcessingService;
         this.redisService = redisService;
         this.auditService = auditService;
+        this.signedUrlService = signedUrlService;
         this.logger = new common_1.Logger(HitlService_1.name);
     }
     async getQueue(tenantId) {
@@ -68,6 +70,9 @@ let HitlService = HitlService_1 = class HitlService {
           e.original_amount,
           e.ocr_raw_json,
           e.status,
+          e.gate_applied,
+          e.supporting_documents,
+          e.receipt_image_url,
           e.created_at,
           emp.full_name   AS employee_name,
           emp.employee_id AS employee_internal_id,
@@ -75,11 +80,22 @@ let HitlService = HitlService_1 = class HitlService {
         FROM expenses e
         LEFT JOIN employees emp ON emp.id = e.employee_id
         LEFT JOIN clients   c   ON c.id   = e.client_id
-        WHERE e.id = $1 AND e.status = $2
+        WHERE e.id = $1
         LIMIT 1
-      `, [expenseId, expense_entity_1.ExpenseStatus.NEEDS_REVIEW]);
+      `, [expenseId]);
             if (!row)
-                throw new common_1.NotFoundException(`Expense ${expenseId} not in review queue`);
+                throw new common_1.NotFoundException(`Expense ${expenseId} not found`);
+            const rawImageUrl = row.receipt_image_url ?? null;
+            const rawDocs = row.supporting_documents ?? [];
+            const [signedImageUrl, signedDocs] = await Promise.all([
+                rawImageUrl ? this.signedUrlService.getSignedUrl(rawImageUrl) : Promise.resolve(null),
+                Promise.all(rawDocs.map(async (doc) => {
+                    if (!doc.url)
+                        return doc;
+                    const signedUrl = await this.signedUrlService.getSignedUrl(doc.url);
+                    return signedUrl !== doc.url ? { ...doc, signed_url: signedUrl } : doc;
+                })),
+            ]);
             return {
                 id: row.id,
                 receipt_date: row.receipt_date,
@@ -89,6 +105,11 @@ let HitlService = HitlService_1 = class HitlService {
                 failure_reasons: row.ocr_raw_json?.diagnostics?.failure_reasons ?? [],
                 ocr_raw_json: row.ocr_raw_json,
                 status: row.status,
+                gate_applied: Number(row.gate_applied ?? 0),
+                supporting_documents: signedDocs,
+                receipt_image_url: rawImageUrl,
+                receipt_image_signed_url: signedImageUrl,
+                already_processed: row.status !== expense_entity_1.ExpenseStatus.NEEDS_REVIEW,
                 created_at: row.created_at,
                 employee_name: row.employee_name,
                 employee_internal_id: row.employee_internal_id,
@@ -163,7 +184,9 @@ let HitlService = HitlService_1 = class HitlService {
                 reviewed_at: new Date().toISOString(),
                 rejected: true,
             };
-            await manager.query(`UPDATE expenses SET status = $1, ocr_raw_json = $2 WHERE id = $3`, [expense_entity_1.ExpenseStatus.REJECTED, JSON.stringify(updatedOcr), expenseId]);
+            await manager.query(`UPDATE expenses
+         SET status = $1, ocr_raw_json = $2, approval_decision = 'rejected'
+         WHERE id = $3`, [expense_entity_1.ExpenseStatus.REJECTED, JSON.stringify(updatedOcr), expenseId]);
         });
         void this.auditService.log({
             tenantId, userId, ipAddress,
@@ -179,7 +202,7 @@ let HitlService = HitlService_1 = class HitlService {
         for (const id of expenseIds) {
             try {
                 if (action === bulk_action_dto_1.BulkActionType.APPROVE) {
-                    await this.applyCorrection(id, tenantId, { reviewer_notes: reviewerNotes });
+                    await this.bulkApproveOne(id, tenantId, reviewerNotes);
                 }
                 else {
                     await this.rejectExpense(id, tenantId, reviewerNotes);
@@ -198,6 +221,36 @@ let HitlService = HitlService_1 = class HitlService {
         });
         return { succeeded, failed };
     }
+    async bulkApproveOne(expenseId, tenantId, reviewerNotes) {
+        const row = await this.dataSource.transaction(async (manager) => {
+            await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+            const [r] = await manager.query(`SELECT e.gate_applied, e.original_amount, e.ocr_raw_json
+         FROM expenses e
+         JOIN clients c ON c.id = e.client_id
+         WHERE e.id = $1 AND c.partner_id = $2
+         LIMIT 1`, [expenseId, tenantId]);
+            return r ?? null;
+        });
+        if (!row)
+            throw new common_1.NotFoundException(`Expense ${expenseId} not found`);
+        const gateAlreadyApplied = Number(row.gate_applied) > 0;
+        const hasAmount = Number(row.original_amount) > 0;
+        if (gateAlreadyApplied && hasAmount) {
+            await this.dataSource.transaction(async (manager) => {
+                await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+                const updatedOcr = {
+                    ...row.ocr_raw_json,
+                    human_reviewed: true,
+                    reviewer_notes: reviewerNotes ?? null,
+                    reviewed_at: new Date().toISOString(),
+                };
+                await manager.query(`UPDATE expenses SET status = $1, ocr_raw_json = $2 WHERE id = $3`, [expense_entity_1.ExpenseStatus.APPROVED, JSON.stringify(updatedOcr), expenseId]);
+            });
+        }
+        else {
+            await this.applyCorrection(expenseId, tenantId, { reviewer_notes: reviewerNotes });
+        }
+    }
     async getOcrMetrics(period) {
         return this.redisService.getOcrMetrics(period);
     }
@@ -208,6 +261,7 @@ exports.HitlService = HitlService = HitlService_1 = __decorate([
     __metadata("design:paramtypes", [typeorm_1.DataSource,
         receipt_processing_service_1.ReceiptProcessingService,
         redis_service_1.RedisService,
-        audit_service_1.AuditService])
+        audit_service_1.AuditService,
+        signed_url_service_1.SignedUrlService])
 ], HitlService);
 //# sourceMappingURL=hitl.service.js.map

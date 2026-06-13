@@ -45,7 +45,8 @@ function buildService(countValue, dataRows) {
         transaction: jest.fn().mockImplementation(async (cb) => cb({ query: queryMock })),
     };
     const mockRedis = { cacheGet: jest.fn().mockResolvedValue(null), cacheSet: jest.fn(), cacheDelete: jest.fn() };
-    const service = new accounting_service_1.AccountingService(mockDataSource, mockNotificationsService, mockRedis);
+    const mockSignedUrlService = { getSignedUrl: jest.fn().mockImplementation((u) => Promise.resolve(u)) };
+    const service = new accounting_service_1.AccountingService(mockDataSource, mockNotificationsService, mockRedis, mockSignedUrlService);
     return { service, queryMock };
 }
 function findCall(queryMock, predicate) {
@@ -205,7 +206,7 @@ describe('listExpenses — filters', () => {
         const { service, queryMock } = buildService(0, []);
         await service.listExpenses(TENANT, {});
         const { sql } = findCall(queryMock, (s) => s.includes('COUNT(*)'));
-        expect(sql).toContain("status IN ('approved','erp_exported','rejected')");
+        expect(sql).toContain("status IN ('approved','erp_exported','rejected','needs_review')");
         const andCount = (sql.match(/AND/gi) ?? []).length;
         expect(andCount).toBe(0);
     });

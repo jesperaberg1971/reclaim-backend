@@ -18,10 +18,11 @@ const platform_express_1 = require("@nestjs/platform-express");
 const passport_1 = require("@nestjs/passport");
 const mobile_service_1 = require("./mobile.service");
 const ALLOWED_MIME_TYPES = new Set([
-    'image/jpeg', 'image/png', 'image/tiff',
-    'image/bmp', 'image/webp', 'application/pdf',
+    'image/jpeg', 'image/jpg', 'image/png', 'image/tiff',
+    'image/bmp', 'image/webp', 'image/heic', 'image/heif',
+    'application/pdf',
 ]);
-const ALLOWED_TYPES_DISPLAY = 'JPEG, PNG, TIFF, BMP, WebP, or PDF';
+const ALLOWED_TYPES_DISPLAY = 'JPEG, PNG, HEIC, WebP, TIFF, BMP, or PDF';
 let MobileController = class MobileController {
     constructor(mobileService) {
         this.mobileService = mobileService;

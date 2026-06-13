@@ -508,8 +508,8 @@ async function doUpload() {
     if (!r.ok) throw new Error(d.message || 'Tải lên thất bại (HTTP '+r.status+')');
 
     expenseId = d.expenseId;
-    if (d.receipt_image_url) {
-      document.getElementById('preview-img').src = d.receipt_image_url;
+    if (d.receipt_image_url || d.receipt_image_signed_url) {
+      document.getElementById('preview-img').src = d.receipt_image_signed_url || d.receipt_image_url;
     }
     setRing('upload', 'done'); setRing('ocr', 'active');
     showStatus('wait', '🔍', 'Đang quét biên lai…',

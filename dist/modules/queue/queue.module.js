@@ -11,7 +11,10 @@ const common_1 = require("@nestjs/common");
 const bullmq_1 = require("@nestjs/bullmq");
 const config_1 = require("@nestjs/config");
 const ocr_processor_1 = require("./ocr.processor");
+const pdf_processor_1 = require("./pdf.processor");
 const ocr_module_1 = require("../ocr/ocr.module");
+const pdf_module_1 = require("../pdf/pdf.module");
+const branding_module_1 = require("../branding/branding.module");
 const redis_module_1 = require("../../common/redis/redis.module");
 const receipt_module_1 = require("../receipt/receipt.module");
 const queue_constants_1 = require("./queue.constants");
@@ -36,11 +39,14 @@ exports.QueueModule = QueueModule = __decorate([
                 }),
             }),
             bullmq_1.BullModule.registerQueue({ name: queue_constants_1.OCR_QUEUE }),
+            bullmq_1.BullModule.registerQueue({ name: queue_constants_1.PDF_GENERATION_QUEUE }),
             ocr_module_1.OcrModule,
+            pdf_module_1.PdfModule,
+            branding_module_1.BrandingModule,
             redis_module_1.RedisModule,
             receipt_module_1.ReceiptModule,
         ],
-        providers: [ocr_processor_1.OcrProcessor],
+        providers: [ocr_processor_1.OcrProcessor, pdf_processor_1.PdfProcessor],
         exports: [bullmq_1.BullModule],
     })
 ], QueueModule);

@@ -23,7 +23,8 @@ function buildService(impl) {
         transaction: jest.fn().mockImplementation(async (cb) => cb({ query: queryMock })),
         query: queryMock,
     };
-    return new accounting_service_1.AccountingService(ds, mockNotifications, mockRedis);
+    const mockSignedUrlService = { getSignedUrl: jest.fn().mockImplementation((u) => Promise.resolve(u)) };
+    return new accounting_service_1.AccountingService(ds, mockNotifications, mockRedis, mockSignedUrlService);
 }
 beforeEach(() => jest.clearAllMocks());
 describe('AccountingService.getSpendingBreakdown', () => {

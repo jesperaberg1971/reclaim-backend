@@ -39,7 +39,8 @@ function buildService(expenseExists = true) {
     const ds = {
         transaction: jest.fn().mockImplementation(async (cb) => cb({ query: queryMock })),
     };
-    const service = new hitl_service_1.HitlService(ds, mockReceiptService, mockRedis, mockAudit);
+    const mockSignedUrlService = { getSignedUrl: jest.fn().mockImplementation((u) => Promise.resolve(u)) };
+    const service = new hitl_service_1.HitlService(ds, mockReceiptService, mockRedis, mockAudit, mockSignedUrlService);
     return { service, queryMock };
 }
 beforeEach(() => jest.clearAllMocks());
@@ -114,9 +115,11 @@ describe('HitlService.bulkAction', () => {
         queryMock.mockImplementation((sql) => {
             if (sql.includes('set_config'))
                 return Promise.resolve([]);
-            if (sql.includes('SELECT id, ocr_raw_json')) {
+            if (sql.includes('gate_applied') && sql.includes('original_amount')) {
                 callCount++;
-                return Promise.resolve(callCount === 2 ? [] : [{ id: EXPENSE, ocr_raw_json: {} }]);
+                return Promise.resolve(callCount === 2 ? [] : [{
+                        gate_applied: 1, original_amount: '100000', ocr_raw_json: {},
+                    }]);
             }
             return Promise.resolve([]);
         });

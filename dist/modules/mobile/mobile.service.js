@@ -25,6 +25,8 @@ const expense_entity_1 = require("../../database/entities/expense.entity");
 const queue_constants_1 = require("../queue/queue.constants");
 const failure_messages_1 = require("../../common/utils/failure-messages");
 const receipt_image_util_1 = require("../../common/storage/receipt-image.util");
+const signed_url_service_1 = require("../../common/storage/signed-url.service");
+const file_storage_service_1 = require("../../common/storage/file-storage.service");
 const date_1 = require("../../common/utils/date");
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set([
@@ -52,10 +54,12 @@ const MAX_IDEM_KEY_LEN = 128;
 const IDEM_TTL_S = 86_400;
 exports.MAX_BATCH_SIZE = 10;
 let MobileService = MobileService_1 = class MobileService {
-    constructor(ocrQueue, expenseRepo, redisService) {
+    constructor(ocrQueue, expenseRepo, redisService, signedUrlService, fileStorageService) {
         this.ocrQueue = ocrQueue;
         this.expenseRepo = expenseRepo;
         this.redisService = redisService;
+        this.signedUrlService = signedUrlService;
+        this.fileStorageService = fileStorageService;
         this.logger = new common_1.Logger(MobileService_1.name);
     }
     async enqueueReceiptUpload(file, user, employeeId, idempotencyKey) {
@@ -88,7 +92,8 @@ let MobileService = MobileService_1 = class MobileService {
             throw new common_1.BadRequestException(`File is ${sizeMb} MB which exceeds the 20 MB limit. Please compress or resize your image.`);
         }
         const expenseId = (0, crypto_1.randomUUID)();
-        const imageUrl = await (0, receipt_image_util_1.saveReceiptImage)(file.buffer, file.mimetype, expenseId);
+        const imageKey = `receipts/${expenseId}.${(0, receipt_image_util_1.mimeToExt)(file.mimetype)}`;
+        const imageUrl = await this.fileStorageService.saveFile(imageKey, file.buffer, file.mimetype);
         const imageDoc = {
             type: 'receipt_image',
             url: imageUrl,
@@ -122,11 +127,13 @@ let MobileService = MobileService_1 = class MobileService {
         };
         await this.ocrQueue.add('process-receipt', jobData, { jobId: expenseId });
         this.logger.log(`Receipt queued — expenseId=${expenseId} tenant=${user.tenantId}`);
+        const signedImageUrl = await this.signedUrlService.getSignedUrl(imageUrl);
         const result = {
             expenseId,
             status: expense_entity_1.ExpenseStatus.PENDING_OCR,
             user_message: STATUS_COPY[expense_entity_1.ExpenseStatus.PENDING_OCR].message,
             receipt_image_url: imageUrl,
+            receipt_image_signed_url: signedImageUrl !== imageUrl ? signedImageUrl : null,
         };
         if (idemCacheKey) {
             await this.redisService.cacheSet(idemCacheKey, JSON.stringify(result), IDEM_TTL_S);
@@ -199,23 +206,31 @@ let MobileService = MobileService_1 = class MobileService {
        ${where}
        ORDER BY e.created_at DESC
        LIMIT $${i} OFFSET $${i + 1}`, params);
-        const expenses = rows.map(r => ({
-            id: r.id,
-            status: r.status,
-            gate_applied: Number(r.gate_applied),
-            final_category: r.final_category,
-            original_amount: r.original_amount,
-            final_amount_deductible: r.final_amount_deductible,
-            currency: r.currency,
-            receipt_date: (0, date_1.toIso)(r.receipt_date),
-            receipt_image_url: r.receipt_image_url ?? '',
-            supporting_documents: Array.isArray(r.supporting_documents)
-                ? r.supporting_documents
-                : [],
-            vendor: r.vendor ?? null,
-            pit_flag: Boolean(r.pit_flag),
-            created_at: (0, date_1.toIso)(r.created_at),
-        }));
+        const signedUrls = await Promise.all(rows.map(r => r.receipt_image_url
+            ? this.signedUrlService.getSignedUrl(r.receipt_image_url)
+            : Promise.resolve(null)));
+        const expenses = rows.map((r, idx) => {
+            const raw = r.receipt_image_url ?? '';
+            const signed = signedUrls[idx];
+            return {
+                id: r.id,
+                status: r.status,
+                gate_applied: Number(r.gate_applied),
+                final_category: r.final_category,
+                original_amount: r.original_amount,
+                final_amount_deductible: r.final_amount_deductible,
+                currency: r.currency,
+                receipt_date: (0, date_1.toIso)(r.receipt_date),
+                receipt_image_url: raw,
+                receipt_image_signed_url: signed && signed !== raw ? signed : null,
+                supporting_documents: Array.isArray(r.supporting_documents)
+                    ? r.supporting_documents
+                    : [],
+                vendor: r.vendor ?? null,
+                pit_flag: Boolean(r.pit_flag),
+                created_at: (0, date_1.toIso)(r.created_at),
+            };
+        });
         const sync_token = expenses.length > 0 ? expenses[0].created_at : null;
         return { expenses, total, limit, offset, sync_token };
     }
@@ -276,6 +291,8 @@ exports.MobileService = MobileService = MobileService_1 = __decorate([
     __param(0, (0, bullmq_1.InjectQueue)(queue_constants_1.OCR_QUEUE)),
     __metadata("design:paramtypes", [bullmq_2.Queue,
         expense_repository_1.ExpenseRepository,
-        redis_service_1.RedisService])
+        redis_service_1.RedisService,
+        signed_url_service_1.SignedUrlService,
+        file_storage_service_1.FileStorageService])
 ], MobileService);
 //# sourceMappingURL=mobile.service.js.map

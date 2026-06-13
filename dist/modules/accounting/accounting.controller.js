@@ -50,6 +50,7 @@ let AccountingController = AccountingController_1 = class AccountingController {
             employeeId: dto.employeeId,
             gate: dto.gate,
             status: dto.status,
+            statusFilter: dto.statusFilter,
             approvalDecision: dto.approvalDecision,
             search: dto.search,
             page: dto.page,

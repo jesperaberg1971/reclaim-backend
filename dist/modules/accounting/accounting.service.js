@@ -19,6 +19,7 @@ const fflate_1 = require("fflate");
 const storage_1 = require("@google-cloud/storage");
 const notifications_service_1 = require("../notifications/notifications.service");
 const redis_service_1 = require("../../common/redis/redis.service");
+const signed_url_service_1 = require("../../common/storage/signed-url.service");
 const DASHBOARD_CACHE_TTL = 120;
 const EXPORTS_CACHE_TTL = 300;
 const ANALYTICS_CACHE_TTL = 300;
@@ -27,6 +28,20 @@ const CATEGORY_LABELS = {
     welfare_allowance: 'Phúc lợi nhân viên (Gate 2)',
     personal_card_reimbursement: 'Chi hộ cá nhân (Gate 3)',
     flagged: 'Bị gắn cờ',
+};
+const GATE_CSV_META = {
+    1: {
+        name: 'Gate 1 – Business Trip Allowance',
+        reasoning: 'Expense occurred during an approved business trip. Deductible as daily travel allowance (Circular 96/2015/TT-BTC).',
+    },
+    2: {
+        name: 'Gate 2 – Employee Welfare Allowance',
+        reasoning: 'Employee welfare allowance for meals/accommodation within the monthly cap.',
+    },
+    3: {
+        name: 'Gate 3 – Personal Card Reimbursement',
+        reasoning: 'Paid with personal card. Reimbursed in full via payment voucher.',
+    },
 };
 const GATE_LABELS = {
     1: { name: 'Gate 1 — Công tác phí', code: 'travel_allowance', debit: '6422', credit: '111' },
@@ -39,17 +54,22 @@ const GATE_EXPLAIN = {
     3: 'Nhân viên thanh toán bằng thẻ cá nhân và được hoàn ứng. Phiếu chi được tạo tự động.',
 };
 let AccountingService = class AccountingService {
-    constructor(dataSource, notificationsService, redisService) {
+    constructor(dataSource, notificationsService, redisService, signedUrlService) {
         this.dataSource = dataSource;
         this.notificationsService = notificationsService;
         this.redisService = redisService;
+        this.signedUrlService = signedUrlService;
     }
     async listExpenses(tenantId, filters) {
         return this.dataSource.transaction(async (manager) => {
             await manager.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-            const conditions = [`e.status IN ('approved','erp_exported','rejected')`];
+            const conditions = [`e.status IN ('approved','erp_exported','rejected','needs_review')`];
             const params = [];
             let p = 1;
+            if (filters.statusFilter) {
+                conditions.push(`e.status = $${p++}`);
+                params.push(filters.statusFilter);
+            }
             if (filters.from) {
                 conditions.push(`e.receipt_date::date >= $${p++}`);
                 params.push(filters.from);
@@ -148,7 +168,7 @@ let AccountingService = class AccountingService {
           e.currency, e.gate_applied, e.final_category, e.pit_flag,
           e.erp_exported, e.status, e.supporting_documents, e.ocr_raw_json,
           e.accountant_reviewed_at, e.reviewer_note, e.approval_decision,
-          e.parent_expense_id,
+          e.parent_expense_id, e.receipt_image_url,
           (SELECT ARRAY_AGG(ec.id) FROM expenses ec WHERE ec.parent_expense_id = e.id) AS child_ids,
           emp.full_name       AS employee_name,
           emp.employee_id     AS employee_internal_id,
@@ -192,14 +212,34 @@ let AccountingService = class AccountingService {
                 amount_vnd: new decimal_js_1.Decimal(String(r.final_amount_deductible)).toFixed(0),
                 bank_last_four: r.bank_last_four ?? null,
             } : null;
+            const originalAmt = new decimal_js_1.Decimal(String(r.original_amount));
+            const deductibleAmt = new decimal_js_1.Decimal(String(r.final_amount_deductible));
+            const overflowAmt = Boolean(r.pit_flag) && originalAmt.greaterThan(deductibleAmt)
+                ? originalAmt.minus(deductibleAmt).toFixed(0)
+                : null;
+            const rawImageUrl = r.receipt_image_url ?? null;
+            const rawDocs = base.supporting_documents ?? [];
+            const [signedImageUrl, signedDocs] = await Promise.all([
+                rawImageUrl ? this.signedUrlService.getSignedUrl(rawImageUrl) : Promise.resolve(null),
+                Promise.all(rawDocs.map(async (doc) => {
+                    if (!doc.url)
+                        return doc;
+                    const signedUrl = await this.signedUrlService.getSignedUrl(doc.url);
+                    return signedUrl !== doc.url ? { ...doc, signed_url: signedUrl } : doc;
+                })),
+            ]);
             return {
                 ...base,
+                supporting_documents: signedDocs,
                 gate_explanation: GATE_EXPLAIN[gate] ?? '',
                 accounting_debit: meta.debit,
                 accounting_credit: meta.credit,
+                overflow_amount_vnd: overflowAmt,
                 ocr_vendor: r.ocr_raw_json?.vendor ?? null,
                 ocr_confidence: r.ocr_raw_json?.confidence ?? 0,
                 child_ids: (r.child_ids ?? []).filter(Boolean),
+                receipt_image_url: rawImageUrl,
+                receipt_image_signed_url: signedImageUrl && signedImageUrl !== rawImageUrl ? signedImageUrl : null,
                 voucher,
                 trip_decision: tripDecision,
             };
@@ -254,7 +294,7 @@ let AccountingService = class AccountingService {
     }
     toExpense(r) {
         const gate = Number(r.gate_applied);
-        const meta = GATE_LABELS[gate] ?? GATE_LABELS[2];
+        const meta = GATE_LABELS[gate] ?? { name: 'Chưa xác định', code: 'pending', debit: '—', credit: '—' };
         const docs = r.supporting_documents ?? [];
         return {
             id: r.id,
@@ -272,6 +312,7 @@ let AccountingService = class AccountingService {
             pit_flag: Boolean(r.pit_flag),
             erp_exported: Boolean(r.erp_exported),
             status: r.status,
+            review_reason: r.status === 'needs_review' ? this.buildReviewReason(r.ocr_raw_json) : null,
             supporting_documents: docs,
             has_voucher: gate === 3,
             accountant_reviewed_at: r.accountant_reviewed_at
@@ -282,6 +323,77 @@ let AccountingService = class AccountingService {
             parent_expense_id: r.parent_expense_id ?? null,
             split_child_count: Number(r.split_child_count ?? 0),
         };
+    }
+    buildExpenseCsv(rows) {
+        const csvEsc = (v) => {
+            const s = String(v ?? '');
+            if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+                return '"' + s.replace(/"/g, '""') + '"';
+            }
+            return s;
+        };
+        const headers = [
+            'expense_id', 'receipt_date', 'employee_name', 'employee_id', 'client_name',
+            'vendor', 'original_amount_vnd', 'deductible_amount_vnd', 'non_deductible_amount_vnd',
+            'currency', 'gate_applied', 'gate_name', 'gate_reasoning',
+            'final_category', 'pit_flag', 'pit_reason',
+            'approval_decision', 'status', 'supporting_documents',
+        ];
+        const lines = [headers.join(',')];
+        for (const r of rows) {
+            const orig = new decimal_js_1.Decimal(String(r.original_amount));
+            const ded = new decimal_js_1.Decimal(String(r.final_amount_deductible));
+            const nonDed = orig.minus(ded).gt(0) ? orig.minus(ded).toFixed(0) : '0';
+            const gate = Number(r.gate_applied);
+            const meta = GATE_CSV_META[gate] ?? { name: `Gate ${gate}`, reasoning: '' };
+            const docs = r.supporting_documents ?? [];
+            const docList = docs
+                .map(d => `${d.type}:${d.filename ?? path.basename(String(d.url ?? ''))}`)
+                .join('|');
+            lines.push([
+                csvEsc(r.id),
+                csvEsc(new Date(r.receipt_date).toISOString().slice(0, 10)),
+                csvEsc(r.employee_name),
+                csvEsc(r.employee_internal_id),
+                csvEsc(r.client_name),
+                csvEsc(r.ocr_raw_json?.vendor ?? ''),
+                csvEsc(orig.toFixed(0)),
+                csvEsc(ded.toFixed(0)),
+                csvEsc(nonDed),
+                csvEsc(r.currency ?? 'VND'),
+                csvEsc(gate),
+                csvEsc(meta.name),
+                csvEsc(meta.reasoning),
+                csvEsc(r.final_category ?? ''),
+                csvEsc(r.pit_flag ? 'yes' : 'no'),
+                csvEsc(r.pit_flag ? 'Amount exceeds tax-free limit — excess subject to personal income tax' : ''),
+                csvEsc(r.approval_decision ?? 'pending'),
+                csvEsc(r.status),
+                csvEsc(docList),
+            ].join(','));
+        }
+        return Buffer.from('﻿' + lines.join('\n'), 'utf-8');
+    }
+    buildReviewReason(ocr) {
+        if (!ocr)
+            return 'Manual review required';
+        const reasons = [];
+        const confidence = Number(ocr.confidence ?? 0);
+        const failureReasons = ocr.diagnostics?.failure_reasons ?? [];
+        const missingFields = ocr.diagnostics?.missing_fields ?? [];
+        if (confidence > 0 && confidence < 0.60) {
+            reasons.push(`Low confidence (${Math.round(confidence * 100)}%)`);
+        }
+        for (const field of missingFields) {
+            reasons.push(`Missing ${field.replace(/_/g, ' ')}`);
+        }
+        for (const fr of failureReasons) {
+            const label = fr.replace(/_/g, ' ');
+            if (!reasons.some(r => r.toLowerCase().includes(label.toLowerCase()))) {
+                reasons.push(label);
+            }
+        }
+        return reasons.length > 0 ? reasons.join(' · ') : 'Manual review required';
     }
     async listEmployees(tenantId) {
         return this.dataSource.transaction(async (manager) => {
@@ -741,12 +853,21 @@ let AccountingService = class AccountingService {
             const expRows = await manager.query(`
         SELECT
           e.id,
-          e.receipt_date::date  AS receipt_date,
+          e.receipt_date::date      AS receipt_date,
+          e.original_amount,
+          e.final_amount_deductible,
+          e.currency,
+          e.gate_applied,
+          e.final_category,
+          e.pit_flag,
+          e.approval_decision,
+          e.status,
           e.receipt_image_url,
           e.supporting_documents,
-          c.name                AS client_name,
-          emp.full_name         AS employee_name,
-          emp.employee_id       AS employee_internal_id
+          e.ocr_raw_json,
+          c.name                    AS client_name,
+          emp.full_name             AS employee_name,
+          emp.employee_id           AS employee_internal_id
         FROM expenses e
         JOIN employees emp ON emp.id = e.employee_id
         JOIN clients   c   ON c.id   = e.client_id
@@ -856,6 +977,7 @@ let AccountingService = class AccountingService {
         }
         manifestLines.push('', `Total files : ${fileCount}`, `Skipped     : ${skipCount}`);
         zipEntries['MANIFEST.txt'] = new Uint8Array(Buffer.from(manifestLines.join('\n'), 'utf-8'));
+        zipEntries['expenses.csv'] = new Uint8Array(this.buildExpenseCsv(rows));
         const zipped = (0, fflate_1.zipSync)(zipEntries, { level: 0 });
         const safeFrom = from.replace(/-/g, '');
         const safeTo = to.replace(/-/g, '');
@@ -873,7 +995,8 @@ exports.AccountingService = AccountingService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [typeorm_1.DataSource,
         notifications_service_1.NotificationsService,
-        redis_service_1.RedisService])
+        redis_service_1.RedisService,
+        signed_url_service_1.SignedUrlService])
 ], AccountingService);
 function safeName(s) {
     return String(s ?? '')

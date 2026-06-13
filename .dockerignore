@@ -1,19 +1,42 @@
-# Git history
-.git
-.gitignore
-
-# Monorepo sub-directories — Dockerfile only needs root-level dist/
-apps/
+# Source — only the compiled dist/ is needed
+src/
 backend/
 frontend/
 
-# Dependencies — installed fresh inside the image via npm ci
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Dependencies — reinstalled cleanly via npm ci inside the image
 node_modules/
 **/node_modules/
 
-# Dev / editor artefacts
-*.md
-.DS_Store
-*.log
+# TypeScript config and source maps (dist/ already has what's needed)
+tsconfig*.json
+*.ts
+!*.d.ts
+
+# Tests
+**/__tests__/
+**/*.spec.ts
+**/*.test.ts
+coverage/
+.nyc_output/
+
+# Local config and secrets — never bake into an image
 .env
 .env.*
+!.env.example
+
+# Editor / OS noise
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.log
+
+# Docs
+*.md
+LICENSE*
+CHANGELOG*

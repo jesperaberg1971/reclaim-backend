@@ -39,10 +39,15 @@ async function bootstrap() {
             },
         },
     }));
-    const uploadsDir = process.env.UPLOADS_DIR ?? path.resolve(process.cwd(), 'uploads');
-    fs.mkdirSync(path.join(uploadsDir, 'receipts'), { recursive: true });
-    fs.mkdirSync(path.join(uploadsDir, 'trip-decisions'), { recursive: true });
-    fs.mkdirSync(path.join(uploadsDir, 'invoices'), { recursive: true });
+    const uploadsDir = process.env.UPLOADS_DIR ?? '/tmp/uploads';
+    try {
+        fs.mkdirSync(path.join(uploadsDir, 'receipts'), { recursive: true });
+        fs.mkdirSync(path.join(uploadsDir, 'trip-decisions'), { recursive: true });
+        fs.mkdirSync(path.join(uploadsDir, 'invoices'), { recursive: true });
+    }
+    catch (err) {
+        console.warn(`[Startup] Could not create upload dirs in ${uploadsDir}: ${err.message}`);
+    }
     app.setGlobalPrefix('api');
     app.useGlobalFilters(new http_exception_filter_1.GlobalExceptionFilter());
     app.useGlobalPipes(new common_1.ValidationPipe({
