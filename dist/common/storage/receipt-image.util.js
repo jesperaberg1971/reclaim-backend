@@ -11,6 +11,10 @@ exports.MIME_TO_EXT = {
     'image/tiff': 'tiff',
     'image/bmp': 'bmp',
     'image/webp': 'webp',
+    'image/heic': 'heic',
+    'image/heif': 'heif',
+    'image/heic-sequence': 'heics',
+    'image/heif-sequence': 'heifs',
     'application/pdf': 'pdf',
 };
 function mimeToExt(mimeType) {

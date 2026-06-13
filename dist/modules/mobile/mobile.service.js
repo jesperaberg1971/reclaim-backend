@@ -29,10 +29,7 @@ const signed_url_service_1 = require("../../common/storage/signed-url.service");
 const file_storage_service_1 = require("../../common/storage/file-storage.service");
 const date_1 = require("../../common/utils/date");
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = new Set([
-    'image/jpeg', 'image/png', 'image/tiff',
-    'image/bmp', 'image/webp', 'application/pdf',
-]);
+const isAllowedMime = (mime) => mime.startsWith('image/') || mime === 'application/pdf';
 const LIST_EXPENSES_MAX_LIMIT = 100;
 const STATUS_COPY = {
     [expense_entity_1.ExpenseStatus.PENDING_OCR]: { message: 'Your receipt is in the processing queue.', action: 'wait' },
@@ -84,8 +81,8 @@ let MobileService = MobileService_1 = class MobileService {
                 throw new common_1.BadRequestException('Employee ID does not match your account.');
             }
         }
-        if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
-            throw new common_1.BadRequestException(`File type "${file.mimetype}" is not supported. Please upload a JPEG, PNG, TIFF, BMP, WebP, or PDF file.`);
+        if (!isAllowedMime(file.mimetype)) {
+            throw new common_1.BadRequestException(`File type "${file.mimetype}" is not supported. Please upload an image or PDF file.`);
         }
         if (file.size > MAX_FILE_BYTES) {
             const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
