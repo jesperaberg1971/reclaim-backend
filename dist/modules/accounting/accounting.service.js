@@ -995,6 +995,22 @@ let AccountingService = class AccountingService {
             }
         }
         manifestLines.push('', `Total files : ${fileCount}`, `Skipped     : ${skipCount}`);
+        manifestLines.push('', '─'.repeat(60), 'Expense Summary', '─'.repeat(60));
+        for (const row of rows) {
+            const dateStr = new Date(row.receipt_date).toISOString().slice(0, 10);
+            const shortId = String(row.id).slice(0, 8);
+            const gate = Number(row.gate_applied);
+            const acct = GATE_LABELS[gate] ?? { debit: '—', credit: '—' };
+            const csvMeta = GATE_CSV_META[gate] ?? { name: `Gate ${gate}`, reasoning: '' };
+            const orig = new decimal_js_1.Decimal(String(row.original_amount));
+            const ded = new decimal_js_1.Decimal(String(row.final_amount_deductible));
+            const nonDed = orig.minus(ded).gt(0) ? orig.minus(ded) : new decimal_js_1.Decimal(0);
+            const vatVnd = row.ocr_raw_json?.vat_amount != null
+                ? `${Number(row.ocr_raw_json.vat_amount).toLocaleString('vi-VN')} VND`
+                : '—';
+            const vendor = row.ocr_raw_json?.vendor ?? '—';
+            manifestLines.push('', `[${shortId}] ${dateStr} | ${vendor}`, `  Employee    : ${row.employee_name} (${row.employee_internal_id})`, `  Company     : ${row.client_name}`, `  Gate        : ${csvMeta.name}`, `  Original    : ${orig.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} ${row.currency ?? 'VND'}`, `  Deductible  : ${ded.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} VND`, `  Non-deduct. : ${nonDed.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} VND`, `  VAT         : ${vatVnd}`, `  PIT flag    : ${row.pit_flag ? 'Yes — excess subject to personal income tax' : 'No'}`, `  Accounting  : Dr. ${acct.debit} / Cr. ${acct.credit}`, `  Decision    : ${row.approval_decision ?? 'pending'}`, `  Status      : ${row.status}`);
+        }
         zipEntries['MANIFEST.txt'] = new Uint8Array(Buffer.from(manifestLines.join('\n'), 'utf-8'));
         zipEntries['expenses.csv'] = new Uint8Array(this.buildExpenseCsv(rows));
         const zipped = (0, fflate_1.zipSync)(zipEntries, { level: 0 });

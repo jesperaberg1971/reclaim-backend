@@ -287,15 +287,27 @@ function extractLargestAmountFromText(text) {
     return largest;
 }
 function parseVietnameseDate(text) {
-    const match = text.match(/\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})\b/);
-    if (!match)
-        return null;
-    const [, day, month, year] = match;
-    const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-    if (isNaN(d.getTime()))
-        return null;
-    if (d.getFullYear() < 2020 || d > new Date())
-        return null;
-    return d.toISOString();
+    const tryDate = (a, b, yr) => {
+        const [day, month] = b > 12 ? [b, a] : [a, b];
+        const d = new Date(yr, month - 1, day);
+        if (isNaN(d.getTime()))
+            return null;
+        if (d.getFullYear() < 2020 || d > new Date())
+            return null;
+        return d;
+    };
+    const m4 = text.match(/\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})\b/);
+    if (m4) {
+        const d = tryDate(parseInt(m4[1]), parseInt(m4[2]), parseInt(m4[3]));
+        if (d)
+            return d.toISOString();
+    }
+    const m2 = text.match(/\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})\b/);
+    if (m2) {
+        const d = tryDate(parseInt(m2[1]), parseInt(m2[2]), 2000 + parseInt(m2[3]));
+        if (d)
+            return d.toISOString();
+    }
+    return null;
 }
 //# sourceMappingURL=ocr.service.js.map
